@@ -46,3 +46,23 @@ func TestCustomResponse(t *testing.T) {
 	assert.Equal(t, http.StatusRequestTimeout, w.Code)
 	assert.Equal(t, "test response", w.Body.String())
 }
+
+func emptySuccessResponse2(c *gin.Context) {
+	time.Sleep(50 * time.Microsecond)
+	c.String(http.StatusOK, "")
+}
+func TestSuccess(t *testing.T) {
+	r := gin.New()
+	r.GET("/", New(
+		WithTimeout(100*time.Microsecond),
+		WithHandler(emptySuccessResponse2),
+		WithResponse(testResponse),
+	))
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "", w.Body.String())
+}
