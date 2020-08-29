@@ -17,7 +17,7 @@ func emptySuccessResponse(c *gin.Context) {
 
 func TestTimeout(t *testing.T) {
 	r := gin.New()
-	r.GET("/", New(WithTimeout(100*time.Microsecond), WithHandler(emptySuccessResponse)))
+	r.GET("/", New(WithTimeout(50*time.Microsecond), WithHandler(emptySuccessResponse)))
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/", nil)
