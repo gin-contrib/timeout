@@ -24,6 +24,17 @@ func WithHandler(h gin.HandlerFunc) Option {
 	}
 }
 
+// WithResponse add gin handler
+func WithResponse(h gin.HandlerFunc) Option {
+	return func(t *Timeout) {
+		t.response = h
+	}
+}
+
+func defaultResponse(c *gin.Context) {
+	c.String(http.StatusRequestTimeout, http.StatusText(http.StatusRequestTimeout))
+}
+
 // Timeout struct
 type Timeout struct {
 	timeout  time.Duration
@@ -38,8 +49,9 @@ func New(opts ...Option) gin.HandlerFunc {
 	)
 
 	t := &Timeout{
-		timeout: defaultTimeout,
-		handler: nil,
+		timeout:  defaultTimeout,
+		handler:  nil,
+		response: defaultResponse,
 	}
 
 	// Loop through each option
@@ -65,9 +77,10 @@ func New(opts ...Option) gin.HandlerFunc {
 
 		select {
 		case <-ch:
+			c.Next()
 		case <-time.After(t.timeout):
 			c.AbortWithStatus(http.StatusRequestTimeout)
-			c.String(http.StatusRequestTimeout, http.StatusText(http.StatusRequestTimeout))
+			t.response(c)
 			return
 		}
 	}
