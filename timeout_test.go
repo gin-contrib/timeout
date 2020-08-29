@@ -27,6 +27,18 @@ func TestTimeout(t *testing.T) {
 	assert.Equal(t, http.StatusText(http.StatusRequestTimeout), w.Body.String())
 }
 
+func TestWithoutTimeout(t *testing.T) {
+	r := gin.New()
+	r.GET("/", New(WithTimeout(-1*time.Microsecond), WithHandler(emptySuccessResponse)))
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "", w.Body.String())
+}
+
 func testResponse(c *gin.Context) {
 	c.String(http.StatusRequestTimeout, "test response")
 }
