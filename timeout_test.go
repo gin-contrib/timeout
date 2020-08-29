@@ -54,7 +54,7 @@ func emptySuccessResponse2(c *gin.Context) {
 func TestSuccess(t *testing.T) {
 	r := gin.New()
 	r.GET("/", New(
-		WithTimeout(100*time.Microsecond),
+		WithTimeout(1*time.Second),
 		WithHandler(emptySuccessResponse2),
 		WithResponse(testResponse),
 	))
