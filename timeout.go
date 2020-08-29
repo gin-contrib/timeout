@@ -28,7 +28,8 @@ func Timeout(handler gin.HandlerFunc, timeout time.Duration) gin.HandlerFunc {
 		case <-ch:
 		case <-time.After(timeout):
 			c.AbortWithStatus(http.StatusRequestTimeout)
-			c.Next()
+			c.String(http.StatusRequestTimeout, http.StatusText(http.StatusRequestTimeout))
+			return
 		}
 	}
 }
