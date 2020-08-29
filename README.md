@@ -38,3 +38,23 @@ func main() {
 	r.Run(":8080")
 }
 ```
+
+### custom error response
+
+Add new error response func:
+
+```go
+func testResponse(c *gin.Context) {
+	c.String(http.StatusRequestTimeout, "test response")
+}
+```
+
+Add `WithResponse` option.
+
+```go
+	r.GET("/", timeout.New(
+		WithTimeout(100*time.Microsecond),
+		WithHandler(emptySuccessResponse),
+		WithResponse(testResponse),
+	))
+```
