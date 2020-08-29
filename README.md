@@ -29,7 +29,10 @@ func emptySuccessResponse(c *gin.Context) {
 func main() {
 	r := gin.New()
 
-	r.GET("/", timeout.Timeout(emptySuccessResponse, 100*time.Microsecond))
+	r.GET("/", timeout.New(
+		timeout.WithTimeout(100*time.Microsecond),
+		timeout.WithHandler(emptySuccessResponse),
+	))
 
 	// Listen and Server in 0.0.0.0:8080
 	r.Run(":8080")
