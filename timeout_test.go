@@ -78,3 +78,23 @@ func TestSuccess(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, "", w.Body.String())
 }
+
+func panicResponse(c *gin.Context) {
+	panic("test")
+}
+
+func TestPanic(t *testing.T) {
+	r := gin.New()
+	r.Use(gin.Recovery())
+	r.GET("/", New(
+		WithTimeout(1*time.Second),
+		WithHandler(panicResponse),
+	))
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Equal(t, "", w.Body.String())
+}

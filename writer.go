@@ -25,6 +25,7 @@ func NewWriter(w gin.ResponseWriter, buf *bytes.Buffer) *Writer {
 	return &Writer{ResponseWriter: w, body: buf, headers: make(http.Header)}
 }
 
+// Write will write data to response body
 func (w *Writer) Write(data []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -35,6 +36,7 @@ func (w *Writer) Write(data []byte) (int, error) {
 	return w.body.Write(data)
 }
 
+// WriteHeader will write http status code
 func (w *Writer) WriteHeader(code int) {
 	checkWriteHeaderCode(code)
 	w.mu.Lock()
@@ -50,10 +52,12 @@ func (w *Writer) writeHeader(code int) {
 	w.code = code
 }
 
+// Header will get response headers
 func (w *Writer) Header() http.Header {
 	return w.headers
 }
 
+// WriteString will write string to response body
 func (w *Writer) WriteString(s string) (int, error) {
 	return w.Write([]byte(s))
 }

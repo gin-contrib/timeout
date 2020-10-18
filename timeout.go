@@ -92,6 +92,7 @@ func New(opts ...Option) gin.HandlerFunc {
 		select {
 		case p := <-panicChan:
 			tw.FreeBuffer()
+			c.Writer = w
 			panic(p)
 
 		case <-finish:
