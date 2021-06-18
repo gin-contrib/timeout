@@ -42,6 +42,10 @@ type Timeout struct {
 	response gin.HandlerFunc
 }
 
+var (
+	buffpool *BufferPool
+)
+
 // New wraps a handler and aborts the process of the handler if the timeout is reached
 func New(opts ...Option) gin.HandlerFunc {
 	const (
@@ -64,24 +68,57 @@ func New(opts ...Option) gin.HandlerFunc {
 		return t.handler
 	}
 
+	buffpool = &BufferPool{}
+
 	return func(c *gin.Context) {
-		ch := make(chan struct{}, 1)
+		finish := make(chan struct{}, 1)
+		panicChan := make(chan interface{}, 1)
+
+		w := c.Writer
+		buffer := buffpool.Get()
+		tw := NewWriter(w, buffer)
+		c.Writer = tw
 
 		go func() {
 			defer func() {
-				_ = gin.Recovery()
+				if p := recover(); p != nil {
+					panicChan <- p
+				}
 			}()
 			t.handler(c)
-			ch <- struct{}{}
+			finish <- struct{}{}
 		}()
 
 		select {
-		case <-ch:
+		case p := <-panicChan:
+			tw.FreeBuffer()
+			c.Writer = w
+			panic(p)
+
+		case <-finish:
 			c.Next()
+			tw.mu.Lock()
+			defer tw.mu.Unlock()
+			dst := tw.ResponseWriter.Header()
+			for k, vv := range tw.Header() {
+				dst[k] = vv
+			}
+			tw.ResponseWriter.WriteHeader(tw.code)
+			tw.ResponseWriter.Write(buffer.Bytes())
+			tw.FreeBuffer()
+			buffpool.Put(buffer)
+
 		case <-time.After(t.timeout):
-			c.AbortWithStatus(http.StatusRequestTimeout)
+			c.Abort()
+			tw.mu.Lock()
+			defer tw.mu.Unlock()
+			tw.timeout = true
+			tw.FreeBuffer()
+			buffpool.Put(buffer)
+
+			c.Writer = w
 			t.response(c)
-			return
+			c.Writer = tw
 		}
 	}
 }
