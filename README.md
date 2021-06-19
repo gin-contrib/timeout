@@ -14,6 +14,7 @@ Timeout wraps a handler and aborts the process of the handler if the timeout is 
 package main
 
 import (
+	"log"
 	"net/http"
 	"time"
 
@@ -35,8 +36,11 @@ func main() {
 	))
 
 	// Listen and Server in 0.0.0.0:8080
-	r.Run(":8080")
+	if err := r.Run(":8080"); err != nil {
+		log.Fatal(err)
+	}
 }
+
 ```
 
 ### custom error response

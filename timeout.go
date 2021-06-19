@@ -42,9 +42,7 @@ type Timeout struct {
 	response gin.HandlerFunc
 }
 
-var (
-	buffpool *BufferPool
-)
+var buffpool *BufferPool
 
 // New wraps a handler and aborts the process of the handler if the timeout is reached
 func New(opts ...Option) gin.HandlerFunc {
@@ -104,7 +102,9 @@ func New(opts ...Option) gin.HandlerFunc {
 				dst[k] = vv
 			}
 			tw.ResponseWriter.WriteHeader(tw.code)
-			tw.ResponseWriter.Write(buffer.Bytes())
+			if _, err := tw.ResponseWriter.Write(buffer.Bytes()); err != nil {
+				panic(err)
+			}
 			tw.FreeBuffer()
 			buffpool.Put(buffer)
 
