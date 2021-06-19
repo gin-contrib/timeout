@@ -1,55 +1,19 @@
 package timeout
 
 import (
-	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
-// Option for timeout
-type Option func(*Timeout)
+var bufPool *BufferPool
 
-// WithTimeout set timeout
-func WithTimeout(timeout time.Duration) Option {
-	return func(t *Timeout) {
-		t.timeout = timeout
-	}
-}
-
-// WithHandler add gin handler
-func WithHandler(h gin.HandlerFunc) Option {
-	return func(t *Timeout) {
-		t.handler = h
-	}
-}
-
-// WithResponse add gin handler
-func WithResponse(h gin.HandlerFunc) Option {
-	return func(t *Timeout) {
-		t.response = h
-	}
-}
-
-func defaultResponse(c *gin.Context) {
-	c.String(http.StatusRequestTimeout, http.StatusText(http.StatusRequestTimeout))
-}
-
-// Timeout struct
-type Timeout struct {
-	timeout  time.Duration
-	handler  gin.HandlerFunc
-	response gin.HandlerFunc
-}
-
-var buffpool *BufferPool
+const (
+	defaultTimeout = 5 * time.Second
+)
 
 // New wraps a handler and aborts the process of the handler if the timeout is reached
 func New(opts ...Option) gin.HandlerFunc {
-	const (
-		defaultTimeout = 5 * time.Second
-	)
-
 	t := &Timeout{
 		timeout:  defaultTimeout,
 		handler:  nil,
@@ -58,6 +22,10 @@ func New(opts ...Option) gin.HandlerFunc {
 
 	// Loop through each option
 	for _, opt := range opts {
+		if opt == nil {
+			panic("timeout Option not be nil")
+		}
+
 		// Call the option giving the instantiated
 		opt(t)
 	}
@@ -66,14 +34,14 @@ func New(opts ...Option) gin.HandlerFunc {
 		return t.handler
 	}
 
-	buffpool = &BufferPool{}
+	bufPool = &BufferPool{}
 
 	return func(c *gin.Context) {
 		finish := make(chan struct{}, 1)
 		panicChan := make(chan interface{}, 1)
 
 		w := c.Writer
-		buffer := buffpool.Get()
+		buffer := bufPool.Get()
 		tw := NewWriter(w, buffer)
 		c.Writer = tw
 
@@ -106,7 +74,7 @@ func New(opts ...Option) gin.HandlerFunc {
 				panic(err)
 			}
 			tw.FreeBuffer()
-			buffpool.Put(buffer)
+			bufPool.Put(buffer)
 
 		case <-time.After(t.timeout):
 			c.Abort()
@@ -114,7 +82,7 @@ func New(opts ...Option) gin.HandlerFunc {
 			defer tw.mu.Unlock()
 			tw.timeout = true
 			tw.FreeBuffer()
-			buffpool.Put(buffer)
+			bufPool.Put(buffer)
 
 			c.Writer = w
 			t.response(c)
