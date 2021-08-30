@@ -27,11 +27,12 @@ func NewWriter(w gin.ResponseWriter, buf *bytes.Buffer) *Writer {
 
 // Write will write data to response body
 func (w *Writer) Write(data []byte) (int, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
 	if w.timeout || w.body == nil {
 		return 0, nil
 	}
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
 
 	return w.body.Write(data)
 }
@@ -39,11 +40,13 @@ func (w *Writer) Write(data []byte) (int, error) {
 // WriteHeader will write http status code
 func (w *Writer) WriteHeader(code int) {
 	checkWriteHeaderCode(code)
-	w.mu.Lock()
-	defer w.mu.Unlock()
 	if w.timeout || w.wroteHeaders {
 		return
 	}
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
 	w.writeHeader(code)
 }
 
