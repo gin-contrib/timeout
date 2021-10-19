@@ -57,8 +57,8 @@ Add `WithResponse` option.
 
 ```go
 	r.GET("/", timeout.New(
-		WithTimeout(100*time.Microsecond),
-		WithHandler(emptySuccessResponse),
-		WithResponse(testResponse),
+		timeout.WithTimeout(100*time.Microsecond),
+		timeout.WithHandler(emptySuccessResponse),
+		timeout.WithResponse(testResponse),
 	))
 ```
