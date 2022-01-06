@@ -1,6 +1,7 @@
 package timeout
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -20,7 +21,7 @@ func TestTimeout(t *testing.T) {
 	r.GET("/", New(WithTimeout(50*time.Microsecond), WithHandler(emptySuccessResponse)))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/", nil)
+	req, _ := http.NewRequestWithContext(context.Background(), "GET", "/", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusRequestTimeout, w.Code)
@@ -32,7 +33,7 @@ func TestWithoutTimeout(t *testing.T) {
 	r.GET("/", New(WithTimeout(-1*time.Microsecond), WithHandler(emptySuccessResponse)))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/", nil)
+	req, _ := http.NewRequestWithContext(context.Background(), "GET", "/", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -52,7 +53,7 @@ func TestCustomResponse(t *testing.T) {
 	))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/", nil)
+	req, _ := http.NewRequestWithContext(context.Background(), "GET", "/", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusRequestTimeout, w.Code)
@@ -63,6 +64,7 @@ func emptySuccessResponse2(c *gin.Context) {
 	time.Sleep(50 * time.Microsecond)
 	c.String(http.StatusOK, "")
 }
+
 func TestSuccess(t *testing.T) {
 	r := gin.New()
 	r.GET("/", New(
@@ -72,7 +74,7 @@ func TestSuccess(t *testing.T) {
 	))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/", nil)
+	req, _ := http.NewRequestWithContext(context.Background(), "GET", "/", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -92,7 +94,7 @@ func TestPanic(t *testing.T) {
 	))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/", nil)
+	req, _ := http.NewRequestWithContext(context.Background(), "GET", "/", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)

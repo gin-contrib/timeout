@@ -67,7 +67,7 @@ func (w *Writer) WriteString(s string) (int, error) {
 
 // FreeBuffer will release buffer pointer
 func (w *Writer) FreeBuffer() {
-	//if not reset body,old bytes will put in bufPool
+	// if not reset body,old bytes will put in bufPool
 	w.body.Reset()
 	w.body = nil
 }
