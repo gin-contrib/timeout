@@ -44,6 +44,7 @@ func New(opts ...Option) gin.HandlerFunc {
 		buffer := bufPool.Get()
 		tw := NewWriter(w, buffer)
 		c.Writer = tw
+		buffer.Reset()
 
 		go func() {
 			defer func() {
