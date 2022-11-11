@@ -28,5 +28,6 @@ func TestWriteHeader_SkipMinusOne(t *testing.T) {
 	writer := Writer{}
 	assert.NotPanics(t, func() {
 		writer.WriteHeader(code)
+		assert.False(t, writer.wroteHeaders)
 	})
 }

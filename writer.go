@@ -43,7 +43,7 @@ func (w *Writer) WriteHeader(code int) {
 		return
 	}
 
-	// gin is using -1 to skip setting the header
+	// gin is using -1 to skip writing the status code
 	// see https://github.com/gin-gonic/gin/blob/a0acf1df2814fcd828cb2d7128f2f4e2136d3fac/response_writer.go#L61
 	if code == -1 {
 		return
