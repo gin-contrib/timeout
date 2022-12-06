@@ -52,7 +52,7 @@ func New(opts ...Option) gin.HandlerFunc {
 					panicChan <- p
 				}
 			}()
-			t.handler(c)
+// 			t.handler(c)
 			finish <- struct{}{}
 		}()
 
@@ -64,18 +64,18 @@ func New(opts ...Option) gin.HandlerFunc {
 
 		case <-finish:
 			c.Next()
-// 			tw.mu.Lock()
-// 			defer tw.mu.Unlock()
-// 			dst := tw.ResponseWriter.Header()
-// 			for k, vv := range tw.Header() {
-// 				dst[k] = vv
-// 			}
-// 			tw.ResponseWriter.WriteHeader(tw.code)
-// 			if _, err := tw.ResponseWriter.Write(buffer.Bytes()); err != nil {
-// 				panic(err)
-// 			}
-// 			tw.FreeBuffer()
-// 			bufPool.Put(buffer)
+			tw.mu.Lock()
+			defer tw.mu.Unlock()
+			dst := tw.ResponseWriter.Header()
+			for k, vv := range tw.Header() {
+				dst[k] = vv
+			}
+			tw.ResponseWriter.WriteHeader(tw.code)
+			if _, err := tw.ResponseWriter.Write(buffer.Bytes()); err != nil {
+				panic(err)
+			}
+			tw.FreeBuffer()
+			bufPool.Put(buffer)
 
 		case <-time.After(t.timeout):
 			c.Abort()
