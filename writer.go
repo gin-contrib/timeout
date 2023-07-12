@@ -50,6 +50,17 @@ func (w *Writer) WriteHeader(code int) {
 	w.writeHeader(code)
 }
 
+func (w *Writer) WriteHeaderNow() {
+	w.WriteHeader(w.code)
+}
+
+func (w *Writer) Status() int {
+	if w.code == 0 || w.timeout {
+		return w.ResponseWriter.Status()
+	}
+	return w.code
+}
+
 func (w *Writer) writeHeader(code int) {
 	w.wroteHeaders = true
 	w.code = code
