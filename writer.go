@@ -48,6 +48,7 @@ func (w *Writer) WriteHeader(code int) {
 	defer w.mu.Unlock()
 
 	w.writeHeader(code)
+	w.ResponseWriter.WriteHeader(code)
 }
 
 func (w *Writer) writeHeader(code int) {
