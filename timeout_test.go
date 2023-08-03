@@ -100,3 +100,48 @@ func TestPanic(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 	assert.Equal(t, "", w.Body.String())
 }
+
+func TestExtendedSuccess(t *testing.T) {
+	r := gin.New()
+	r.Use(New(
+		WithTimeout(50*time.Microsecond),
+		WithExtendedTimeout(250*time.Microsecond),
+		WithExtendedPaths([]string{"/ex.*"}),
+		WithHandler(emptySuccessResponse),
+	))
+
+	r.GET("/extended")
+
+	w := httptest.NewRecorder()
+
+	reqExFails, _ := http.NewRequestWithContext(context.Background(), "GET", "/extended", nil)
+	r.ServeHTTP(w, reqExFails)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "", w.Body.String())
+}
+
+func TestExtendedTimeout(t *testing.T) {
+	r := gin.New()
+	r.Use(New(
+		WithTimeout(50*time.Microsecond),
+		WithExtendedTimeout(200*time.Microsecond),
+		WithExtendedPaths([]string{"/extended"}),
+		WithHandler(extendedTimeout),
+	))
+
+	r.GET("/extended")
+
+	w := httptest.NewRecorder()
+
+	reqExFails, _ := http.NewRequestWithContext(context.Background(), "GET", "/extended", nil)
+	r.ServeHTTP(w, reqExFails)
+
+	assert.Equal(t, http.StatusRequestTimeout, w.Code)
+	assert.Equal(t, http.StatusText(http.StatusRequestTimeout), w.Body.String())
+}
+
+func extendedTimeout(ctx *gin.Context) {
+	// Let the route artificially timeout
+	time.Sleep(250 * time.Microsecond)
+}
