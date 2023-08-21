@@ -115,8 +115,7 @@ func TestDeadlineExceeded(t *testing.T) {
 			defer wg.Done()
 			time.Sleep(100 * time.Millisecond)
 			assert.Equal(t, "value", c.Request.Header.Get("X-Test"))
-			// This context is canceled by calling `w.cancelCtx()` in http.Server.serve().
-			assert.Equal(t, context.Canceled, c.Request.Context().Err())
+			assert.Equal(t, context.DeadlineExceeded, c.Request.Context().Err())
 			select {
 			case <-c.Request.Context().Done():
 				// OK
