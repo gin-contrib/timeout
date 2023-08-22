@@ -2,8 +2,6 @@ package timeout
 
 import (
 	"context"
-	"crypto/tls"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -123,83 +121,16 @@ func TestDeadlineExceeded(t *testing.T) {
 				assert.Fail(t, "context is not done")
 			}
 		}),
-		WithResponse(func(c *gin.Context) {
-			c.String(http.StatusRequestTimeout, "timeout")
-		}),
+		WithResponse(testResponse),
 	))
 
-	srv := &http.Server{
-		Addr:              ":3124",
-		Handler:           r,
-		ReadHeaderTimeout: 1 * time.Second,
-	}
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequestWithContext(context.Background(), "GET", "/", nil)
+	req.Header.Set("X-Test", "value")
+	r.ServeHTTP(w, req)
 
-	go func() {
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			assert.Error(t, err)
-		}
-	}()
-
-	// have to wait for the goroutine to start and run the server
-	// otherwise the main thread will complete
-	time.Sleep(5 * time.Millisecond)
-
-	testRequest(
-		t,
-		"http://localhost:3124",
-		"408 Request Timeout",
-		"timeout",
-	)
+	assert.Equal(t, http.StatusRequestTimeout, w.Code)
+	assert.Equal(t, "test response", w.Body.String())
 
 	wg.Wait()
-
-	if err := srv.Close(); err != nil {
-		assert.Fail(t, "Server Close: "+err.Error())
-	}
-}
-
-// params[0]=url example:http://127.0.0.1:8080/index (cannot be empty)
-// params[1]=response status (custom compare status) default:"200 OK"
-// params[2]=response body (custom compare content)  default:"it worked"
-func testRequest(t *testing.T, params ...string) {
-	if len(params) == 0 {
-		t.Fatal("url cannot be empty")
-	}
-
-	req, err := http.NewRequest(
-		"GET",
-		params[0],
-		nil,
-	)
-	assert.NoError(t, err)
-
-	header := http.Header{}
-	header.Set("X-Test", "value")
-	req.Header = header
-
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true,
-		},
-	}
-	client := &http.Client{Transport: tr}
-	resp, err := client.Do(req)
-	assert.NoError(t, err)
-	defer resp.Body.Close()
-
-	body, ioerr := io.ReadAll(resp.Body)
-	assert.NoError(t, ioerr)
-
-	responseStatus := "200 OK"
-	if len(params) > 1 && params[1] != "" {
-		responseStatus = params[1]
-	}
-
-	responseBody := "it worked"
-	if len(params) > 2 && params[2] != "" {
-		responseBody = params[2]
-	}
-
-	assert.Equal(t, responseStatus, resp.Status, "should get a "+responseStatus)
-	assert.Equal(t, responseBody, string(body), "resp body should match")
 }
