@@ -39,5 +39,23 @@ linters:
     - whitespace
     - gofumpt
 
+linters-settings:
+  depguard:
+    rules:
+      Main:
+        files:
+          - $all
+          - "!$test"
+        allow:
+          - $gostd
+          - github.com/gin-gonic/gin
+      Test:
+        files:
+          - $test
+        allow:
+          - $gostd
+          - github.com/gin-gonic/gin
+          - github.com/stretchr/testify
+
 run:
   timeout: 3m
