@@ -130,7 +130,9 @@ func TestWriter_Status(t *testing.T) {
 
 	r.ServeHTTP(w, req)
 
-	assert.Equal(t, w.Result().StatusCode, http.StatusInternalServerError)
+	// Close the response body
+	defer w.Result().Body.Close()
+	assert.Equal(t, http.StatusInternalServerError, w.Result().StatusCode)
 	assert.Equal(t, strconv.Itoa(http.StatusInternalServerError), req.Header.Get("X-Status-Code-MW-Set"))
 }
 
