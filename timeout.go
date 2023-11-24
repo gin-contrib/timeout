@@ -1,6 +1,7 @@
 package timeout
 
 import (
+	"context"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -46,6 +47,10 @@ func New(opts ...Option) gin.HandlerFunc {
 		c.Writer = tw
 		buffer.Reset()
 
+		ctx, cancel := context.WithTimeout(c, t.timeout)
+		c.Request = c.Request.WithContext(ctx)
+		defer cancel()
+
 		go func() {
 			defer func() {
 				if p := recover(); p != nil {
@@ -77,7 +82,7 @@ func New(opts ...Option) gin.HandlerFunc {
 			tw.FreeBuffer()
 			bufPool.Put(buffer)
 
-		case <-time.After(t.timeout):
+		case <-c.Request.Context().Done():
 			c.Abort()
 			tw.mu.Lock()
 			defer tw.mu.Unlock()
