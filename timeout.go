@@ -70,7 +70,7 @@ func New(opts ...Option) gin.HandlerFunc {
 			for k, vv := range tw.Header() {
 				dst[k] = vv
 			}
-			tw.ResponseWriter.WriteHeader(tw.code)
+
 			if _, err := tw.ResponseWriter.Write(buffer.Bytes()); err != nil {
 				panic(err)
 			}

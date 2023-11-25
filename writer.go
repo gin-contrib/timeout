@@ -37,7 +37,9 @@ func (w *Writer) Write(data []byte) (int, error) {
 	return w.body.Write(data)
 }
 
-// WriteHeader will write http status code
+// WriteHeader sends an HTTP response header with the provided status code.
+// If the response writer has already written headers or if a timeout has occurred,
+// this method does nothing.
 func (w *Writer) WriteHeader(code int) {
 	if w.timeout || w.wroteHeaders {
 		return
@@ -55,6 +57,7 @@ func (w *Writer) WriteHeader(code int) {
 	defer w.mu.Unlock()
 
 	w.writeHeader(code)
+	w.ResponseWriter.WriteHeader(code)
 }
 
 func (w *Writer) writeHeader(code int) {
@@ -77,6 +80,16 @@ func (w *Writer) FreeBuffer() {
 	// if not reset body,old bytes will put in bufPool
 	w.body.Reset()
 	w.body = nil
+}
+
+// Status we must override Status func here,
+// or the http status code returned by gin.Context.Writer.Status()
+// will always be 200 in other custom gin middlewares.
+func (w *Writer) Status() int {
+	if w.code == 0 || w.timeout {
+		return w.ResponseWriter.Status()
+	}
+	return w.code
 }
 
 func checkWriteHeaderCode(code int) {
