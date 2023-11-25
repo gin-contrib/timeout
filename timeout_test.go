@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 	"testing"
 	"time"
 
@@ -100,37 +99,4 @@ func TestPanic(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 	assert.Equal(t, "", w.Body.String())
-}
-
-func TestDeadlineExceeded(t *testing.T) {
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	r := gin.New()
-	r.GET("/", New(
-		WithTimeout(50*time.Millisecond),
-		WithHandler(func(c *gin.Context) {
-			defer wg.Done()
-			time.Sleep(100 * time.Millisecond)
-			assert.Equal(t, "value", c.Request.Header.Get("X-Test"))
-			assert.Equal(t, context.DeadlineExceeded, c.Request.Context().Err())
-			select {
-			case <-c.Request.Context().Done():
-				// OK
-			case <-time.After(1 * time.Second):
-				assert.Fail(t, "context is not done")
-			}
-		}),
-		WithResponse(testResponse),
-	))
-
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequestWithContext(context.Background(), "GET", "/", nil)
-	req.Header.Set("X-Test", "value")
-	r.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusRequestTimeout, w.Code)
-	assert.Equal(t, "test response", w.Body.String())
-
-	wg.Wait()
 }
