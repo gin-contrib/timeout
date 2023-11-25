@@ -102,7 +102,6 @@ func TestPanic(t *testing.T) {
 	assert.Equal(t, "", w.Body.String())
 }
 
-
 func TestDeadlineExceeded(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
