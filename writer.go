@@ -72,6 +72,16 @@ func (w *Writer) FreeBuffer() {
 	w.body = nil
 }
 
+// Status we must override Status func here,
+// or the http status code returned by gin.Context.Writer.Status()
+// will always be 200 in other custom gin middlewares.
+func (w *Writer) Status() int {
+	if w.code == 0 || w.timeout {
+		return w.ResponseWriter.Status()
+	}
+	return w.code
+}
+
 func checkWriteHeaderCode(code int) {
 	if code < 100 || code > 999 {
 		panic(fmt.Sprintf("invalid http status code: %d", code))
