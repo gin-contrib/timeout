@@ -37,7 +37,9 @@ func (w *Writer) Write(data []byte) (int, error) {
 	return w.body.Write(data)
 }
 
-// WriteHeader will write http status code
+// WriteHeader sends an HTTP response header with the provided status code.
+// If the response writer has already written headers or if a timeout has occurred,
+// this method does nothing.
 func (w *Writer) WriteHeader(code int) {
 	checkWriteHeaderCode(code)
 	if w.timeout || w.wroteHeaders {
@@ -48,6 +50,7 @@ func (w *Writer) WriteHeader(code int) {
 	defer w.mu.Unlock()
 
 	w.writeHeader(code)
+	w.ResponseWriter.WriteHeader(code)
 }
 
 func (w *Writer) writeHeader(code int) {
