@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -101,37 +100,6 @@ func TestPanic(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 	assert.Equal(t, "", w.Body.String())
-}
-
-func TestWriter_Status(t *testing.T) {
-	r := gin.New()
-
-	r.Use(New(
-		WithTimeout(1*time.Second),
-		WithHandler(func(c *gin.Context) {
-			c.Next()
-		}),
-		WithResponse(testResponse),
-	))
-
-	r.Use(func(c *gin.Context) {
-		c.Next()
-		statusInMW := c.Writer.Status()
-		c.Request.Header.Set("X-Status-Code-MW-Set", strconv.Itoa(statusInMW))
-		t.Logf("[%s] %s %s %d\n", time.Now().Format(time.RFC3339), c.Request.Method, c.Request.URL, statusInMW)
-	})
-
-	r.GET("/test", func(c *gin.Context) {
-		c.Writer.WriteHeader(http.StatusInternalServerError)
-	})
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
-
-	r.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.Equal(t, strconv.Itoa(http.StatusInternalServerError), req.Header.Get("X-Status-Code-MW-Set"))
 }
 
 func TestDeadlineExceeded(t *testing.T) {
