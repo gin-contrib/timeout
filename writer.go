@@ -27,12 +27,12 @@ func NewWriter(w gin.ResponseWriter, buf *bytes.Buffer) *Writer {
 
 // Write will write data to response body
 func (w *Writer) Write(data []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
 	if w.timeout || w.body == nil {
 		return 0, nil
 	}
-
-	w.mu.Lock()
-	defer w.mu.Unlock()
 
 	return w.body.Write(data)
 }
@@ -41,6 +41,9 @@ func (w *Writer) Write(data []byte) (int, error) {
 // If the response writer has already written headers or if a timeout has occurred,
 // this method does nothing.
 func (w *Writer) WriteHeader(code int) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
 	if w.timeout || w.wroteHeaders {
 		return
 	}
@@ -52,9 +55,6 @@ func (w *Writer) WriteHeader(code int) {
 	}
 
 	checkWriteHeaderCode(code)
-
-	w.mu.Lock()
-	defer w.mu.Unlock()
 
 	w.writeHeader(code)
 	w.ResponseWriter.WriteHeader(code)
