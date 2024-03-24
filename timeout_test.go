@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -99,4 +100,34 @@ func TestPanic(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 	assert.Equal(t, "", w.Body.String())
+}
+
+func TestLargeResponse(t *testing.T) {
+	r := gin.New()
+	r.GET("/slow", New(
+		WithTimeout(1*time.Second),
+		WithHandler(func(c *gin.Context) {
+			c.Next()
+		}),
+		WithResponse(func(c *gin.Context) {
+			c.String(http.StatusRequestTimeout, `{"error": "timeout error"}`)
+		}),
+	), func(c *gin.Context) {
+		time.Sleep(999*time.Millisecond + 500*time.Microsecond) // wait almost same as timeout
+		c.String(http.StatusRequestTimeout, `{"error": "handler error"}`)
+	})
+
+	wg := sync.WaitGroup{}
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequestWithContext(context.Background(), "GET", "/slow", nil)
+			r.ServeHTTP(w, req)
+			assert.Equal(t, http.StatusRequestTimeout, w.Code)
+			assert.Equal(t, `{"error": "timeout error"}`, w.Body.String())
+		}()
+	}
+	wg.Wait()
 }
