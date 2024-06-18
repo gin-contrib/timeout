@@ -15,9 +15,10 @@ const (
 // New wraps a handler and aborts the process of the handler if the timeout is reached
 func New(opts ...Option) gin.HandlerFunc {
 	t := &Timeout{
-		timeout:  defaultTimeout,
-		handler:  nil,
-		response: defaultResponse,
+		timeout:         defaultTimeout,
+		extendedTimeout: defaultTimeout,
+		handler:         nil,
+		response:        defaultResponse,
 	}
 
 	// Loop through each option
@@ -45,6 +46,11 @@ func New(opts ...Option) gin.HandlerFunc {
 		tw := NewWriter(w, buffer)
 		c.Writer = tw
 		buffer.Reset()
+
+		timeout := t.timeout
+		if t.shouldExtendPathTimeout(c) {
+			timeout = t.extendedTimeout
+		}
 
 		go func() {
 			defer func() {
@@ -77,7 +83,7 @@ func New(opts ...Option) gin.HandlerFunc {
 			tw.FreeBuffer()
 			bufPool.Put(buffer)
 
-		case <-time.After(t.timeout):
+		case <-time.After(timeout):
 			c.Abort()
 			tw.mu.Lock()
 			defer tw.mu.Unlock()
