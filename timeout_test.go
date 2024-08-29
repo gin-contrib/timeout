@@ -117,7 +117,7 @@ func TestConcurrentHeaderWrites(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req, err := http.NewRequest(http.MethodGet, "/", nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	if err != nil {
 		t.Fatal("http NewRequest: ", err)
 	}
