@@ -100,3 +100,26 @@ func TestPanic(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 	assert.Equal(t, "", w.Body.String())
 }
+
+func TestConcurrentHeaderWrites(t *testing.T) {
+	r := gin.New()
+	r.Use(gin.Recovery())
+	r.Use(New(
+		WithTimeout(time.Millisecond*50),
+		WithHandler(func(c *gin.Context) {
+			c.Next()
+		}),
+	))
+	r.GET("/", func(c *gin.Context) {
+		for {
+			c.Header("X-Foo", "bar")
+		}
+	})
+
+	w := httptest.NewRecorder()
+	req, err := http.NewRequest(http.MethodGet, "/", nil)
+	if err != nil {
+		t.Fatal("http NewRequest: ", err)
+	}
+	r.ServeHTTP(w, req)
+}

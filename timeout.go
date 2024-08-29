@@ -85,9 +85,11 @@ func New(opts ...Option) gin.HandlerFunc {
 			tw.FreeBuffer()
 			bufPool.Put(buffer)
 
-			c.Writer = w
-			t.response(c)
-			c.Writer = tw
+			// Copy gin.Context here to avoid concurrent writes to c.ResponseWriter's header(which is a map),
+			// see https://github.com/gin-contrib/timeout/issues/15
+			ctxCopy := c.Copy()
+			ctxCopy.Writer = w
+			t.response(ctxCopy)
 		}
 	}
 }
