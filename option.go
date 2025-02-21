@@ -2,6 +2,7 @@ package timeout
 
 import (
 	"net/http"
+	"regexp"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -14,6 +15,20 @@ type Option func(*Timeout)
 func WithTimeout(timeout time.Duration) Option {
 	return func(t *Timeout) {
 		t.timeout = timeout
+	}
+}
+
+// WithExtendedTimeout set extended paths timeout
+func WithExtendedTimeout(extendedTimeout time.Duration) Option {
+	return func(t *Timeout) {
+		t.extendedTimeout = extendedTimeout
+	}
+}
+
+// WithExtendedPaths set extended paths
+func WithExtendedPaths(extendedPaths []string) Option {
+	return func(t *Timeout) {
+		t.extendedPaths = extendedPaths
 	}
 }
 
@@ -35,9 +50,28 @@ func defaultResponse(c *gin.Context) {
 	c.String(http.StatusRequestTimeout, http.StatusText(http.StatusRequestTimeout))
 }
 
+// shouldExtendPathTimeout receiver matches the current path against the list of extensible timeouts.
+// Not providing extended paths will not override the normal timeout duration.
+func (t *Timeout) shouldExtendPathTimeout(c *gin.Context) bool {
+	for _, b := range t.extendedPaths {
+		matched, err := regexp.MatchString(b, c.Request.URL.Path)
+		if err != nil {
+			return false
+		}
+
+		if matched {
+			return true
+		}
+	}
+
+	return false
+}
+
 // Timeout struct
 type Timeout struct {
-	timeout  time.Duration
-	handler  gin.HandlerFunc
-	response gin.HandlerFunc
+	timeout         time.Duration
+	extendedTimeout time.Duration
+	extendedPaths   []string
+	handler         gin.HandlerFunc
+	response        gin.HandlerFunc
 }
