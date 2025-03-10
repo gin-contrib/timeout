@@ -1,6 +1,7 @@
 package timeout
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -211,5 +212,51 @@ func TestHTTPStatusCode(t *testing.T) {
 					cases[i].ExpStatusCode, resp.Code)
 			}
 		})
+	}
+}
+
+func TestWriter_WriteHeaderNow(t *testing.T) {
+	const (
+		testOrigin  = "*"
+		testMethods = "GET,HEAD,POST,PUT,OPTIONS"
+	)
+
+	g := gin.New()
+	g.Use(testNew(time.Second * 3))
+	g.Use(func(c *gin.Context) {
+		if c.Request.Method == http.MethodOptions {
+			c.Header("Access-Control-Allow-Origin", testOrigin)
+			c.Header("Access-Control-Allow-Methods", testMethods)
+
+			// Below 3 lines can be replaced with `c.AbortWithStatus(http.StatusNoContent)`
+			c.Status(http.StatusNoContent)
+			c.Writer.WriteHeaderNow()
+			c.Abort()
+
+			return
+		}
+		c.Next()
+	})
+	g.GET("/test", func(c *gin.Context) {
+		c.String(http.StatusOK, "It's works!")
+	})
+
+	serv := httptest.NewServer(g)
+	defer serv.Close()
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodOptions, serv.URL+"/test", nil)
+	if err != nil {
+		t.Fatal("NewRequest:", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal("Do request:", err)
+	}
+	defer resp.Body.Close()
+	if origin := resp.Header.Get("Access-Control-Allow-Origin"); origin != testOrigin {
+		t.Fatalf("header Access-Control-Allow-Origin value %q expected, but got %q", testOrigin, origin)
+	}
+	if methods := resp.Header.Get("Access-Control-Allow-Methods"); methods != testMethods {
+		t.Fatalf("header Access-Control-Allow-Methods value %q expected, but got %q", testMethods, methods)
 	}
 }
