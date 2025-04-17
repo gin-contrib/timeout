@@ -25,6 +25,19 @@ func NewWriter(w gin.ResponseWriter, buf *bytes.Buffer) *Writer {
 	return &Writer{ResponseWriter: w, body: buf, headers: make(http.Header)}
 }
 
+// WriteHeaderNow the reason why we override this func is:
+// once calling the func WriteHeaderNow() of based gin.ResponseWriter,
+// this Writer can no longer apply the cached headers to the based
+// gin.ResponseWriter. see test case `TestWriter_WriteHeaderNow` for details.
+func (w *Writer) WriteHeaderNow() {
+	if !w.wroteHeaders {
+		if w.code == 0 {
+			w.code = http.StatusOK
+		}
+		w.WriteHeader(w.code)
+	}
+}
+
 // Write will write data to response body
 func (w *Writer) Write(data []byte) (int, error) {
 	w.mu.Lock()
