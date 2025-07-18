@@ -34,6 +34,13 @@ func (w *Writer) WriteHeaderNow() {
 		if w.code == 0 {
 			w.code = http.StatusOK
 		}
+
+		// Copy headers from our cache to the underlying ResponseWriter
+		dst := w.ResponseWriter.Header()
+		for k, vv := range w.headers {
+			dst[k] = vv
+		}
+
 		w.WriteHeader(w.code)
 	}
 }
@@ -68,6 +75,12 @@ func (w *Writer) WriteHeader(code int) {
 	}
 
 	checkWriteHeaderCode(code)
+
+	// Copy headers from our cache to the underlying ResponseWriter
+	dst := w.ResponseWriter.Header()
+	for k, vv := range w.headers {
+		dst[k] = vv
+	}
 
 	w.writeHeader(code)
 	w.ResponseWriter.WriteHeader(code)
