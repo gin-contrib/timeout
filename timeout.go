@@ -80,7 +80,7 @@ func New(opts ...Option) gin.HandlerFunc {
 				}
 			}()
 			// Use the copied context to avoid data race when running handler in a goroutine.
-			t.handler(cCopy)
+			t.handler(c)
 			finish <- struct{}{}
 		}()
 

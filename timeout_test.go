@@ -19,7 +19,28 @@ func emptySuccessResponse(c *gin.Context) {
 
 func TestTimeout(t *testing.T) {
 	r := gin.New()
-	r.GET("/", New(WithTimeout(50*time.Microsecond), WithHandler(emptySuccessResponse)))
+	r.GET("/", New(
+		WithTimeout(50*time.Microsecond),
+		WithHandler(emptySuccessResponse),
+	))
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequestWithContext(context.Background(), "GET", "/", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusRequestTimeout, w.Code)
+	assert.Equal(t, http.StatusText(http.StatusRequestTimeout), w.Body.String())
+}
+
+func TestTimeoutWithUse(t *testing.T) {
+	r := gin.New()
+	r.Use(New(
+		WithTimeout(50*time.Microsecond),
+		WithHandler(func(c *gin.Context) {
+			c.Next()
+		}),
+	))
+	r.GET("/", emptySuccessResponse)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequestWithContext(context.Background(), "GET", "/", nil)
