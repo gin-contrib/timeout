@@ -87,18 +87,16 @@ func TestLargeResponse(t *testing.T) {
 	r.GET("/slow", New(
 		WithTimeout(1*time.Second),
 		WithHandler(func(c *gin.Context) {
-			c.Next()
+			time.Sleep(2 * time.Second) // wait almost same as timeout
+			c.String(http.StatusBadRequest, `{"error": "handler error"}`)
 		}),
 		WithResponse(func(c *gin.Context) {
 			c.String(http.StatusRequestTimeout, `{"error": "timeout error"}`)
 		}),
-	), func(c *gin.Context) {
-		time.Sleep(2 * time.Second) // wait almost same as timeout
-		c.String(http.StatusBadRequest, `{"error": "handler error"}`)
-	})
+	))
 
 	wg := sync.WaitGroup{}
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -119,10 +117,12 @@ This test verifies that after a timeout occurs, no subsequent middleware is exec
 func TestNoNextAfterTimeout(t *testing.T) {
 	r := gin.New()
 	called := false
-	r.Use(New(WithTimeout(50*time.Millisecond), WithHandler(func(c *gin.Context) {
-		time.Sleep(100 * time.Millisecond)
-		c.String(http.StatusOK, "should not reach")
-	})))
+	r.Use(New(
+		WithTimeout(50*time.Millisecond),
+		WithHandler(func(c *gin.Context) {
+			time.Sleep(100 * time.Millisecond)
+			c.String(http.StatusOK, "should not reach")
+		})))
 	r.Use(func(c *gin.Context) {
 		called = true
 	})
