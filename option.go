@@ -17,13 +17,6 @@ func WithTimeout(timeout time.Duration) Option {
 	}
 }
 
-// WithHandler add gin handler
-func WithHandler(h gin.HandlerFunc) Option {
-	return func(t *Timeout) {
-		t.handler = h
-	}
-}
-
 // WithResponse add gin handler
 func WithResponse(h gin.HandlerFunc) Option {
 	return func(t *Timeout) {
@@ -38,6 +31,5 @@ func defaultResponse(c *gin.Context) {
 // Timeout struct
 type Timeout struct {
 	timeout  time.Duration
-	handler  gin.HandlerFunc
 	response gin.HandlerFunc
 }

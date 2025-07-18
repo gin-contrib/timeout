@@ -44,9 +44,6 @@ func TestWriter_Status(t *testing.T) {
 
 	r.Use(New(
 		WithTimeout(1*time.Second),
-		WithHandler(func(c *gin.Context) {
-			c.Next()
-		}),
 		WithResponse(testResponse),
 	))
 
@@ -75,7 +72,6 @@ func TestWriter_Status(t *testing.T) {
 func testNew(duration time.Duration) gin.HandlerFunc {
 	return New(
 		WithTimeout(duration),
-		WithHandler(func(c *gin.Context) { c.Next() }),
 		WithResponse(timeoutHandler()),
 	)
 }
