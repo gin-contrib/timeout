@@ -82,26 +82,6 @@ func TestSuccess(t *testing.T) {
 	assert.Equal(t, "", w.Body.String())
 }
 
-func panicResponse(c *gin.Context) {
-	panic("test")
-}
-
-func TestPanic(t *testing.T) {
-	r := gin.New()
-	r.Use(gin.Recovery())
-	r.GET("/", New(
-		WithTimeout(1*time.Second),
-		WithHandler(panicResponse),
-	))
-
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequestWithContext(context.Background(), "GET", "/", nil)
-	r.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.Equal(t, "", w.Body.String())
-}
-
 func TestLargeResponse(t *testing.T) {
 	r := gin.New()
 	r.GET("/slow", New(
@@ -132,7 +112,10 @@ func TestLargeResponse(t *testing.T) {
 	wg.Wait()
 }
 
-// Test to ensure no further middleware is executed after timeout (covers c.Next() removal)
+/*
+Test to ensure no further middleware is executed after timeout (covers c.Next() removal)
+This test verifies that after a timeout occurs, no subsequent middleware is executed.
+*/
 func TestNoNextAfterTimeout(t *testing.T) {
 	r := gin.New()
 	called := false
@@ -150,4 +133,32 @@ func TestNoNextAfterTimeout(t *testing.T) {
 
 	assert.Equal(t, http.StatusRequestTimeout, w.Code)
 	assert.False(t, called, "next middleware should not be called after timeout")
+}
+
+/*
+TestTimeoutPanic: verifies the behavior when a panic occurs inside a handler wrapped by the timeout middleware.
+This test ensures that a panic in the handler is caught by CustomRecovery and returns a 500 status code with the panic message.
+*/
+func TestTimeoutPanic(t *testing.T) {
+	r := gin.New()
+	// Use CustomRecovery to catch panics and return a custom error message.
+	r.Use(gin.CustomRecovery(func(c *gin.Context, recovered interface{}) {
+		c.String(http.StatusInternalServerError, "panic caught: %v", recovered)
+	}))
+
+	// Register the timeout middleware; the handler will panic.
+	r.GET("/panic", New(
+		WithTimeout(100*time.Millisecond),
+		WithHandler(func(c *gin.Context) {
+			panic("timeout panic test")
+		}),
+	))
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequestWithContext(context.Background(), "GET", "/panic", nil)
+	r.ServeHTTP(w, req)
+
+	// Verify the response status code and body.
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "panic caught: timeout panic test")
 }

@@ -1,6 +1,9 @@
 package timeout
 
 import (
+	"fmt"
+	"net/http"
+	"runtime/debug"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -20,36 +23,50 @@ func New(opts ...Option) gin.HandlerFunc {
 		response: defaultResponse,
 	}
 
-	// Loop through each option
+	// Apply each option to the Timeout instance
 	for _, opt := range opts {
 		if opt == nil {
-			panic("timeout Option not be nil")
+			panic("timeout Option must not be nil")
 		}
 
-		// Call the option giving the instantiated
+		// Call the option to configure the Timeout instance
 		opt(t)
 	}
 
+	// If timeout is not set or is negative, return the original handler directly (no timeout logic).
 	if t.timeout <= 0 {
 		return t.handler
 	}
 
+	// Initialize the buffer pool for response writers.
 	bufPool = &BufferPool{}
 
 	return func(c *gin.Context) {
+		// Channel to signal handler completion.
 		finish := make(chan struct{}, 1)
-		panicChan := make(chan interface{}, 1)
+		// panicChan transmits both the panic value and the stack trace.
+		type panicInfo struct {
+			Value interface{}
+			Stack []byte
+		}
+		panicChan := make(chan panicInfo, 1)
 
+		// Swap the response writer with a buffered writer.
 		w := c.Writer
 		buffer := bufPool.Get()
 		tw := NewWriter(w, buffer)
 		c.Writer = tw
 		buffer.Reset()
 
+		// Run the handler in a separate goroutine to enforce timeout and catch panics.
 		go func() {
 			defer func() {
 				if p := recover(); p != nil {
-					panicChan <- p
+					// Capture both the panic value and the stack trace.
+					panicChan <- panicInfo{
+						Value: p,
+						Stack: debug.Stack(),
+					}
 				}
 			}()
 			t.handler(c)
@@ -57,12 +74,24 @@ func New(opts ...Option) gin.HandlerFunc {
 		}()
 
 		select {
-		case p := <-panicChan:
+		case pi := <-panicChan:
+			// Handler panicked: free buffer, restore writer, and print stack trace if in debug mode.
 			tw.FreeBuffer()
 			c.Writer = w
-			panic(p)
+			// If in debug mode, write error and stack trace to response for easier debugging.
+			if gin.IsDebugging() {
+				// Add the panic error to Gin's error list and write 500 status and stack trace to response.
+				c.Error(fmt.Errorf("%v", pi.Value))
+				c.Writer.WriteHeader(http.StatusInternalServerError)
+				_, _ = c.Writer.Write([]byte(fmt.Sprintf("panic caught: %v\n", pi.Value)))
+				_, _ = c.Writer.Write([]byte("Panic stack trace:\n"))
+				_, _ = c.Writer.Write(pi.Stack)
+			}
+			// In non-debug mode, re-throw the panic to be handled by the upper middleware.
+			panic(pi)
 
 		case <-finish:
+			// Handler finished successfully: flush buffer to response.
 			tw.mu.Lock()
 			defer tw.mu.Unlock()
 			dst := tw.ResponseWriter.Header()
@@ -77,6 +106,7 @@ func New(opts ...Option) gin.HandlerFunc {
 			bufPool.Put(buffer)
 
 		case <-time.After(t.timeout):
+			// Handler timed out: abort context and write timeout response.
 			c.Abort()
 			tw.mu.Lock()
 			defer tw.mu.Unlock()
