@@ -81,9 +81,11 @@ func New(opts ...Option) gin.HandlerFunc {
 			// If in debug mode, write error and stack trace to response for easier debugging.
 			if gin.IsDebugging() {
 				// Add the panic error to Gin's error list and write 500 status and stack trace to response.
-				c.Error(fmt.Errorf("%v", pi.Value))
+				// Check the error return value of c.Error to satisfy errcheck linter.
+				_ = c.Error(fmt.Errorf("%v", pi.Value))
 				c.Writer.WriteHeader(http.StatusInternalServerError)
-				_, _ = c.Writer.Write([]byte(fmt.Sprintf("panic caught: %v\n", pi.Value)))
+				// Use fmt.Fprintf instead of Write([]byte(fmt.Sprintf(...))) to satisfy staticcheck.
+				_, _ = fmt.Fprintf(c.Writer, "panic caught: %v\n", pi.Value)
 				_, _ = c.Writer.Write([]byte("Panic stack trace:\n"))
 				_, _ = c.Writer.Write(pi.Stack)
 			}

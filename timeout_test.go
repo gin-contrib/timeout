@@ -137,7 +137,8 @@ func TestNoNextAfterTimeout(t *testing.T) {
 
 /*
 TestTimeoutPanic: verifies the behavior when a panic occurs inside a handler wrapped by the timeout middleware.
-This test ensures that a panic in the handler is caught by CustomRecovery and returns a 500 status code with the panic message.
+This test ensures that a panic in the handler is caught by CustomRecovery and returns a 500 status code
+with the panic message.
 */
 func TestTimeoutPanic(t *testing.T) {
 	r := gin.New()
