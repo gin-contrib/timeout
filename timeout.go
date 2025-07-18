@@ -63,7 +63,6 @@ func New(opts ...Option) gin.HandlerFunc {
 			panic(p)
 
 		case <-finish:
-			c.Next()
 			tw.mu.Lock()
 			defer tw.mu.Unlock()
 			dst := tw.ResponseWriter.Header()
