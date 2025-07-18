@@ -32,6 +32,7 @@ go get github.com/gin-contrib/timeout
 A minimal example that times out a slow handler:
 
 ```go
+// _example/example01/main.go
 package main
 
 import (
@@ -43,18 +44,16 @@ import (
   "github.com/gin-gonic/gin"
 )
 
-func emptySuccessResponse(c *gin.Context) {
-  time.Sleep(200 * time.Microsecond)
-  c.String(http.StatusOK, "")
-}
-
 func main() {
   r := gin.New()
 
+  // Apply timeout middleware to a single route
   r.GET("/", timeout.New(
     timeout.WithTimeout(100*time.Microsecond),
-    timeout.WithHandler(emptySuccessResponse),
-  ))
+  ), func(c *gin.Context) {
+    time.Sleep(200 * time.Microsecond)
+    c.String(http.StatusOK, "")
+  })
 
   if err := r.Run(":8080"); err != nil {
     log.Fatal(err)
@@ -71,15 +70,18 @@ func main() {
 You can define a custom response when a timeout occurs:
 
 ```go
+// Custom timeout response for a single route
 func testResponse(c *gin.Context) {
   c.String(http.StatusRequestTimeout, "custom timeout response")
 }
 
 r.GET("/", timeout.New(
   timeout.WithTimeout(100*time.Microsecond),
-  timeout.WithHandler(emptySuccessResponse),
   timeout.WithResponse(testResponse),
-))
+), func(c *gin.Context) {
+  time.Sleep(200 * time.Microsecond)
+  c.String(http.StatusOK, "")
+})
 ```
 
 ---
@@ -96,9 +98,6 @@ func testResponse(c *gin.Context) {
 func timeoutMiddleware() gin.HandlerFunc {
   return timeout.New(
     timeout.WithTimeout(500*time.Millisecond),
-    timeout.WithHandler(func(c *gin.Context) {
-      c.Next()
-    }),
     timeout.WithResponse(testResponse),
   )
 }
@@ -219,6 +218,7 @@ func main() {
 Suppose your handler always takes longer than the timeout:
 
 ```go
+// _example/example04/main.go (handler always times out)
 r.GET("/", func(c *gin.Context) {
   time.Sleep(1 * time.Second)
   c.String(http.StatusOK, "Hello world!")
@@ -244,4 +244,11 @@ timeout
 
 ## More Examples
 
-See the [`_example`](./_example) directory for more complete and advanced usage scenarios.
+The [`_example`](./_example) directory contains additional usage scenarios:
+
+- **example01**: Minimal usage – how to apply a timeout to a single route.
+- **example02**: Using timeout as a global middleware with a custom timeout response.
+- **example03**: Demonstrates logging timeout events and includes a `concurrent_requests.sh` script for load testing.
+- **example04**: Shows integration with custom authentication middleware and includes its own [README](./_example/example04/README.md) for detailed explanation.
+
+Explore these examples for practical patterns and advanced integration tips.
