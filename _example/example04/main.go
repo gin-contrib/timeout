@@ -17,9 +17,6 @@ func testResponse(c *gin.Context) {
 func timeoutMiddleware() gin.HandlerFunc {
 	return timeout.New(
 		timeout.WithTimeout(500*time.Millisecond),
-		timeout.WithHandler(func(c *gin.Context) {
-			c.Next()
-		}),
 		timeout.WithResponse(testResponse),
 	)
 }
@@ -33,7 +30,6 @@ func authMiddleware() gin.HandlerFunc {
 			return
 		}
 		c.AbortWithStatus(401)
-		return
 	}
 }
 

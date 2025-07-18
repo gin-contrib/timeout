@@ -19,7 +19,6 @@ const (
 func New(opts ...Option) gin.HandlerFunc {
 	t := &Timeout{
 		timeout:  defaultTimeout,
-		handler:  nil,
 		response: defaultResponse,
 	}
 
@@ -31,16 +30,6 @@ func New(opts ...Option) gin.HandlerFunc {
 
 		// Call the option to configure the Timeout instance
 		opt(t)
-	}
-
-	// Ensure handler is set
-	if t.handler == nil {
-		panic("timeout handler must not be nil")
-	}
-
-	// If timeout is not set or is negative, return the original handler directly (no timeout logic).
-	if t.timeout <= 0 {
-		return t.handler
 	}
 
 	// Initialize the buffer pool for response writers.
@@ -80,7 +69,7 @@ func New(opts ...Option) gin.HandlerFunc {
 				}
 			}()
 			// Use the copied context to avoid data race when running handler in a goroutine.
-			t.handler(c)
+			c.Next()
 			finish <- struct{}{}
 		}()
 

@@ -21,8 +21,9 @@ func TestTimeout(t *testing.T) {
 	r := gin.New()
 	r.GET("/", New(
 		WithTimeout(50*time.Microsecond),
-		WithHandler(emptySuccessResponse),
-	))
+	),
+		emptySuccessResponse,
+	)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequestWithContext(context.Background(), "GET", "/", nil)
@@ -35,10 +36,7 @@ func TestTimeout(t *testing.T) {
 func TestTimeoutWithUse(t *testing.T) {
 	r := gin.New()
 	r.Use(New(
-		WithTimeout(50*time.Microsecond),
-		WithHandler(func(c *gin.Context) {
-			c.Next()
-		}),
+		WithTimeout(50 * time.Microsecond),
 	))
 	r.GET("/", emptySuccessResponse)
 
@@ -52,14 +50,18 @@ func TestTimeoutWithUse(t *testing.T) {
 
 func TestWithoutTimeout(t *testing.T) {
 	r := gin.New()
-	r.GET("/", New(WithTimeout(-1*time.Microsecond), WithHandler(emptySuccessResponse)))
+	r.GET("/", New(
+		WithTimeout(-1*time.Microsecond),
+	),
+		emptySuccessResponse,
+	)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequestWithContext(context.Background(), "GET", "/", nil)
 	r.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, "", w.Body.String())
+	assert.Equal(t, http.StatusRequestTimeout, w.Code)
+	assert.Equal(t, http.StatusText(http.StatusRequestTimeout), w.Body.String())
 }
 
 func testResponse(c *gin.Context) {
@@ -70,9 +72,10 @@ func TestCustomResponse(t *testing.T) {
 	r := gin.New()
 	r.GET("/", New(
 		WithTimeout(100*time.Microsecond),
-		WithHandler(emptySuccessResponse),
 		WithResponse(testResponse),
-	))
+	),
+		emptySuccessResponse,
+	)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequestWithContext(context.Background(), "GET", "/", nil)
@@ -91,9 +94,10 @@ func TestSuccess(t *testing.T) {
 	r := gin.New()
 	r.GET("/", New(
 		WithTimeout(1*time.Second),
-		WithHandler(emptySuccessResponse2),
 		WithResponse(testResponse),
-	))
+	),
+		emptySuccessResponse2,
+	)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequestWithContext(context.Background(), "GET", "/", nil)
@@ -107,14 +111,15 @@ func TestLargeResponse(t *testing.T) {
 	r := gin.New()
 	r.GET("/slow", New(
 		WithTimeout(1*time.Second),
-		WithHandler(func(c *gin.Context) {
-			time.Sleep(2 * time.Second) // wait almost same as timeout
-			c.String(http.StatusBadRequest, `{"error": "handler error"}`)
-		}),
 		WithResponse(func(c *gin.Context) {
 			c.String(http.StatusRequestTimeout, `{"error": "timeout error"}`)
 		}),
-	))
+	),
+		func(c *gin.Context) {
+			time.Sleep(2 * time.Second) // wait almost same as timeout
+			c.String(http.StatusBadRequest, `{"error": "handler error"}`)
+		},
+	)
 
 	wg := sync.WaitGroup{}
 	for i := 0; i < 10; i++ {
@@ -140,10 +145,12 @@ func TestNoNextAfterTimeout(t *testing.T) {
 	called := false
 	r.Use(New(
 		WithTimeout(50*time.Millisecond),
-		WithHandler(func(c *gin.Context) {
+	),
+		func(c *gin.Context) {
 			time.Sleep(100 * time.Millisecond)
 			c.String(http.StatusOK, "should not reach")
-		})))
+		},
+	)
 	r.Use(func(c *gin.Context) {
 		called = true
 	})
@@ -171,10 +178,11 @@ func TestTimeoutPanic(t *testing.T) {
 	// Register the timeout middleware; the handler will panic.
 	r.GET("/panic", New(
 		WithTimeout(100*time.Millisecond),
-		WithHandler(func(c *gin.Context) {
+	),
+		func(c *gin.Context) {
 			panic("timeout panic test")
-		}),
-	))
+		},
+	)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequestWithContext(context.Background(), "GET", "/panic", nil)

@@ -14,9 +14,6 @@ func main() {
 
 	r.Use(timeout.New(
 		timeout.WithTimeout(100*time.Microsecond),
-		timeout.WithHandler(func(c *gin.Context) {
-			c.String(http.StatusRequestTimeout, "timeout")
-		}),
 	), func(c *gin.Context) {
 		c.Next()
 
