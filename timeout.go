@@ -15,6 +15,12 @@ const (
 	defaultTimeout = 5 * time.Second
 )
 
+// panicChan transmits both the panic value and the stack trace.
+type panicInfo struct {
+	Value interface{}
+	Stack []byte
+}
+
 // New wraps a handler and aborts the process of the handler if the timeout is reached
 func New(opts ...Option) gin.HandlerFunc {
 	t := &Timeout{
@@ -36,15 +42,6 @@ func New(opts ...Option) gin.HandlerFunc {
 	bufPool = &BufferPool{}
 
 	return func(c *gin.Context) {
-		// Channel to signal handler completion.
-		finish := make(chan struct{}, 1)
-		// panicChan transmits both the panic value and the stack trace.
-		type panicInfo struct {
-			Value interface{}
-			Stack []byte
-		}
-		panicChan := make(chan panicInfo, 1)
-
 		// Swap the response writer with a buffered writer.
 		w := c.Writer
 		buffer := bufPool.Get()
@@ -57,6 +54,9 @@ func New(opts ...Option) gin.HandlerFunc {
 		// Set the copied context's writer to our timeout writer to ensure proper buffering
 		cCopy.Writer = tw
 
+		// Channel to signal handler completion.
+		finish := make(chan struct{}, 1)
+		panicChan := make(chan panicInfo, 1)
 		// Run the handler in a separate goroutine to enforce timeout and catch panics.
 		go func() {
 			defer func() {
