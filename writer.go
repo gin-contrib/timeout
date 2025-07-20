@@ -18,6 +18,7 @@ type Writer struct {
 	timeout      bool
 	wroteHeaders bool
 	code         int
+	size         int
 }
 
 // NewWriter will return a timeout.Writer pointer
@@ -43,18 +44,6 @@ func (w *Writer) WriteHeaderNow() {
 
 		w.WriteHeader(w.code)
 	}
-}
-
-// Write will write data to response body
-func (w *Writer) Write(data []byte) (int, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	if w.timeout || w.body == nil {
-		return 0, nil
-	}
-
-	return w.body.Write(data)
 }
 
 // WriteHeader sends an HTTP response header with the provided status code.
@@ -96,15 +85,37 @@ func (w *Writer) Header() http.Header {
 	return w.headers
 }
 
+// Write will write data to response body
+func (w *Writer) Write(data []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if w.timeout || w.body == nil {
+		return 0, nil
+	}
+
+	n, err := w.body.Write(data)
+	w.size += n
+
+	return n, err
+}
+
 // WriteString will write string to response body
 func (w *Writer) WriteString(s string) (int, error) {
-	return w.Write([]byte(s))
+	n, err := w.Write([]byte(s))
+	w.size += n
+	return n, err
+}
+
+func (w *Writer) Size() int {
+	return w.size
 }
 
 // FreeBuffer will release buffer pointer
 func (w *Writer) FreeBuffer() {
 	// if not reset body,old bytes will put in bufPool
 	w.body.Reset()
+	w.size = -1
 	w.body = nil
 }
 

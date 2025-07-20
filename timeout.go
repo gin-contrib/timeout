@@ -57,6 +57,7 @@ func New(opts ...Option) gin.HandlerFunc {
 		// Channel to signal handler completion.
 		finish := make(chan struct{}, 1)
 		panicChan := make(chan panicInfo, 1)
+
 		// Run the handler in a separate goroutine to enforce timeout and catch panics.
 		go func() {
 			defer func() {
