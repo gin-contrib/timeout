@@ -15,18 +15,28 @@ import (
 )
 
 func TestWriteHeader(t *testing.T) {
-	code1 := 99
-	errmsg1 := fmt.Sprintf("invalid http status code: %d", code1)
-	code2 := 1000
-	errmsg2 := fmt.Sprintf("invalid http status code: %d", code2)
-
-	writer := Writer{}
-	assert.PanicsWithValue(t, errmsg1, func() {
-		writer.WriteHeader(code1)
-	})
-	assert.PanicsWithValue(t, errmsg2, func() {
-		writer.WriteHeader(code2)
-	})
+	tests := []struct {
+		name string
+		code int
+	}{
+		{
+			name: "code less than 100",
+			code: 99,
+		},
+		{
+			name: "code greater than 999",
+			code: 1000,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			writer := Writer{}
+			errmsg := fmt.Sprintf("invalid http status code: %d", tt.code)
+			assert.PanicsWithValue(t, errmsg, func() {
+				writer.WriteHeader(tt.code)
+			})
+		})
+	}
 }
 
 func TestWriteHeader_SkipMinusOne(t *testing.T) {
@@ -193,8 +203,6 @@ func TestHTTPStatusCode(t *testing.T) {
 
 	for i := range cases {
 		t.Run(cases[i].Name, func(tt *testing.T) {
-			tt.Logf("Test case [%s]", cases[i].Name)
-
 			router := gin.Default()
 
 			router.Use(testNew(1 * time.Second))
@@ -203,10 +211,7 @@ func TestHTTPStatusCode(t *testing.T) {
 			req, resp := initCase(cases[i])
 			router.ServeHTTP(resp, req)
 
-			if resp.Code != cases[i].ExpStatusCode {
-				tt.Errorf("response is different from expected:\nexp: >>>%d<<<\ngot: >>>%d<<<",
-					cases[i].ExpStatusCode, resp.Code)
-			}
+			assert.Equal(tt, cases[i].ExpStatusCode, resp.Code)
 		})
 	}
 }
@@ -249,10 +254,7 @@ func TestWriter_WriteHeaderNow(t *testing.T) {
 		t.Fatal("Do request:", err)
 	}
 	defer resp.Body.Close()
-	if origin := resp.Header.Get("Access-Control-Allow-Origin"); origin != testOrigin {
-		t.Fatalf("header Access-Control-Allow-Origin value %q expected, but got %q", testOrigin, origin)
-	}
-	if methods := resp.Header.Get("Access-Control-Allow-Methods"); methods != testMethods {
-		t.Fatalf("header Access-Control-Allow-Methods value %q expected, but got %q", testMethods, methods)
-	}
+	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+	assert.Equal(t, testOrigin, resp.Header.Get("Access-Control-Allow-Origin"))
+	assert.Equal(t, testMethods, resp.Header.Get("Access-Control-Allow-Methods"))
 }
