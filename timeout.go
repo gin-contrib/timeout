@@ -69,10 +69,14 @@ func New(opts ...Option) gin.HandlerFunc {
 					}
 				}
 			}()
-			// Use the copied context to avoid data race when running handler in a goroutine.
-			c.Next()
+			// Use cCopy.Next() to avoid data race on the context's index field
+			cCopy.Next()
 			finish <- struct{}{}
 		}()
+
+		// Block until handler finishes, panics, or times out.
+		// This prevents the middleware from returning and gin continuing the handler chain
+		// while the goroutine is still executing.
 
 		select {
 		case pi := <-panicChan:
@@ -124,17 +128,17 @@ func New(opts ...Option) gin.HandlerFunc {
 			bufPool.Put(buffer)
 			tw.mu.Unlock()
 
-			// Create a fresh context for the timeout response
-			// Important: check if headers were already written
-			timeoutCtx := c.Copy()
-			timeoutCtx.Writer = w
+			// Restore the original writer
+			c.Writer = w
 
 			// Only write timeout response if headers haven't been written to original writer
 			if !w.Written() {
-				t.response(timeoutCtx)
+				t.response(c)
 			}
-			// Abort the context to prevent further middleware execution after timeout
-			c.AbortWithStatus(http.StatusRequestTimeout)
+			// Do not call c.Abort() or c.AbortWithStatus() here as it would cause a data race
+			// with the handler goroutine that may still be executing cCopy.Next().
+			// The middleware will return naturally, and no further middleware will execute
+			// since we don't call c.Next() in this case.
 		}
 	}
 }
