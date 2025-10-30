@@ -59,6 +59,7 @@ func New(opts ...Option) gin.HandlerFunc {
 		panicChan := make(chan panicInfo, 1)
 
 		// Run the handler in a separate goroutine to enforce timeout and catch panics.
+		// We use cCopy.Next() instead of c.Next() to avoid data races on c.index
 		go func() {
 			defer func() {
 				if p := recover(); p != nil {
@@ -69,7 +70,6 @@ func New(opts ...Option) gin.HandlerFunc {
 					}
 				}
 			}()
-			// Use cCopy.Next() to avoid data race on the context's index field
 			cCopy.Next()
 			finish <- struct{}{}
 		}()
@@ -119,6 +119,10 @@ func New(opts ...Option) gin.HandlerFunc {
 			}
 			tw.FreeBuffer()
 			bufPool.Put(buffer)
+			// Restore the original writer
+			c.Writer = w
+			// Prevent further middleware execution
+			c.Abort()
 
 		case <-time.After(t.timeout):
 			tw.mu.Lock()
@@ -128,17 +132,16 @@ func New(opts ...Option) gin.HandlerFunc {
 			bufPool.Put(buffer)
 			tw.mu.Unlock()
 
-			// Restore the original writer
-			c.Writer = w
-
 			// Only write timeout response if headers haven't been written to original writer
+			// We write directly to w to avoid touching c while the handler goroutine may still be executing
 			if !w.Written() {
-				t.response(c)
+				w.WriteHeader(http.StatusRequestTimeout)
+				_, _ = w.Write([]byte(http.StatusText(http.StatusRequestTimeout)))
 			}
-			// Do not call c.Abort() or c.AbortWithStatus() here as it would cause a data race
-			// with the handler goroutine that may still be executing cCopy.Next().
-			// The middleware will return naturally, and no further middleware will execute
-			// since we don't call c.Next() in this case.
+			// Restore the original writer so gin knows the response was written
+			// This is safe because tw.timeout is set, so any writes from the handler goroutine
+			// to tw will be ignored
+			c.Writer = w
 		}
 	}
 }
