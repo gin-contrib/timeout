@@ -204,7 +204,7 @@ func TestStaticFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	testFile := tmpDir + "/test.txt"
 	testContent := "test file content"
-	err := os.WriteFile(testFile, []byte(testContent), 0644)
+	err := os.WriteFile(testFile, []byte(testContent), 0o600)
 	assert.NoError(t, err)
 
 	r := gin.New()
@@ -214,7 +214,7 @@ func TestStaticFile(t *testing.T) {
 
 	// Use StaticFile to serve a single file
 	r.StaticFile("/file", testFile)
-	
+
 	// Use Static to serve a directory
 	r.Static("/files", tmpDir)
 
