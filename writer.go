@@ -46,9 +46,9 @@ func (w *Writer) WriteHeaderNow() {
 	}
 }
 
-// WriteHeader sends an HTTP response header with the provided status code.
-// If the response writer has already written headers or if a timeout has occurred,
-// this method does nothing.
+// WriteHeader buffers the HTTP response status code.
+// Multiple calls are allowed; the last call wins.
+// If a timeout has occurred, this method does nothing.
 func (w *Writer) WriteHeader(code int) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
