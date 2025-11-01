@@ -31,9 +31,6 @@ func NewWriter(w gin.ResponseWriter, buf *bytes.Buffer) *Writer {
 // this Writer can no longer apply the cached headers to the based
 // gin.ResponseWriter. see test case `TestWriter_WriteHeaderNow` for details.
 func (w *Writer) WriteHeaderNow() {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
 	if !w.wroteHeaders {
 		if w.code == 0 {
 			w.code = http.StatusOK
@@ -45,8 +42,7 @@ func (w *Writer) WriteHeaderNow() {
 			dst[k] = vv
 		}
 
-		w.writeHeader(w.code)
-		w.ResponseWriter.WriteHeader(w.code)
+		w.WriteHeader(w.code)
 	}
 }
 
@@ -112,8 +108,6 @@ func (w *Writer) WriteString(s string) (int, error) {
 }
 
 func (w *Writer) Size() int {
-	w.mu.Lock()
-	defer w.mu.Unlock()
 	return w.size
 }
 
@@ -129,9 +123,6 @@ func (w *Writer) FreeBuffer() {
 // or the http status code returned by gin.Context.Writer.Status()
 // will always be 200 in other custom gin middlewares.
 func (w *Writer) Status() int {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
 	if w.code == 0 || w.timeout {
 		return w.ResponseWriter.Status()
 	}
