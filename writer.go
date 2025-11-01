@@ -53,7 +53,7 @@ func (w *Writer) WriteHeader(code int) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	if w.timeout || w.wroteHeaders {
+	if w.timeout {
 		return
 	}
 
@@ -65,14 +65,7 @@ func (w *Writer) WriteHeader(code int) {
 
 	checkWriteHeaderCode(code)
 
-	// Copy headers from our cache to the underlying ResponseWriter
-	dst := w.ResponseWriter.Header()
-	for k, vv := range w.headers {
-		dst[k] = vv
-	}
-
 	w.writeHeader(code)
-	w.ResponseWriter.WriteHeader(code)
 }
 
 func (w *Writer) writeHeader(code int) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -191,4 +192,45 @@ func TestTimeoutPanic(t *testing.T) {
 	// Verify the response status code and body.
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 	assert.Contains(t, w.Body.String(), "panic caught: timeout panic test")
+}
+
+/*
+TestStaticFile: verifies that static file serving works correctly with the timeout middleware.
+This test ensures that when serving static files, the correct status code (200) is returned
+along with the file content, not 404.
+*/
+func TestStaticFile(t *testing.T) {
+	// Create a temporary directory and file for testing
+	tmpDir := t.TempDir()
+	testFile := tmpDir + "/test.txt"
+	testContent := "test file content"
+	err := os.WriteFile(testFile, []byte(testContent), 0644)
+	assert.NoError(t, err)
+
+	r := gin.New()
+	r.Use(New(
+		WithTimeout(500 * time.Millisecond),
+	))
+
+	// Use StaticFile to serve a single file
+	r.StaticFile("/file", testFile)
+	
+	// Use Static to serve a directory
+	r.Static("/files", tmpDir)
+
+	// Test 1: StaticFile
+	w1 := httptest.NewRecorder()
+	req1, _ := http.NewRequestWithContext(context.Background(), "GET", "/file", nil)
+	r.ServeHTTP(w1, req1)
+
+	assert.Equal(t, http.StatusOK, w1.Code, "StaticFile should return 200 OK")
+	assert.Equal(t, testContent, w1.Body.String())
+
+	// Test 2: Static directory
+	w2 := httptest.NewRecorder()
+	req2, _ := http.NewRequestWithContext(context.Background(), "GET", "/files/test.txt", nil)
+	r.ServeHTTP(w2, req2)
+
+	assert.Equal(t, http.StatusOK, w2.Code, "Static directory should return 200 OK")
+	assert.Equal(t, testContent, w2.Body.String())
 }

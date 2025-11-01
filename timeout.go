@@ -105,6 +105,8 @@ func New(opts ...Option) gin.HandlerFunc {
 			// Write the status code if it was set, otherwise use 200
 			if tw.code != 0 {
 				tw.ResponseWriter.WriteHeader(tw.code)
+			} else {
+				tw.ResponseWriter.WriteHeader(http.StatusOK)
 			}
 
 			// Only write content if there's any
