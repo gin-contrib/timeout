@@ -3,8 +3,10 @@ package timeout
 import (
 	"fmt"
 	"net/http"
+	"reflect"
 	"runtime/debug"
 	"time"
+	"unsafe"
 
 	"github.com/gin-gonic/gin"
 )
@@ -53,6 +55,8 @@ func New(opts ...Option) gin.HandlerFunc {
 		cCopy := c.Copy()
 		// Set the copied context's writer to our timeout writer to ensure proper buffering
 		cCopy.Writer = tw
+		// Clone handler state so cCopy can continue the chain independently
+		cloneHandlerState(cCopy, c)
 
 		// Channel to signal handler completion.
 		finish := make(chan struct{}, 1)
@@ -69,8 +73,8 @@ func New(opts ...Option) gin.HandlerFunc {
 					}
 				}
 			}()
-			// Use the copied context to avoid data race when running handler in a goroutine.
-			c.Next()
+			// Execute the remaining handlers on the copied context.
+			cCopy.Next()
 			finish <- struct{}{}
 		}()
 
@@ -116,6 +120,9 @@ func New(opts ...Option) gin.HandlerFunc {
 			tw.FreeBuffer()
 			bufPool.Put(buffer)
 
+			// Prevent Gin from executing subsequent handlers; we've already run them via cCopy
+			c.Abort()
+
 		case <-time.After(t.timeout):
 			tw.mu.Lock()
 			// Handler timed out: set timeout flag and clean up
@@ -133,8 +140,33 @@ func New(opts ...Option) gin.HandlerFunc {
 			if !w.Written() {
 				t.response(timeoutCtx)
 			}
-			// Abort the context to prevent further middleware execution after timeout
-			c.AbortWithStatus(http.StatusRequestTimeout)
+			// Prevent Gin from executing subsequent handlers after timeout.
+			c.Abort()
 		}
+	}
+}
+
+// cloneHandlerState copies the handler chain and index from src to dst using reflection/unsafe
+// so that dst.Next() can proceed with the same remaining handlers independently.
+func cloneHandlerState(dst, src *gin.Context) {
+	vdst := reflect.ValueOf(dst).Elem()
+	vsrc := reflect.ValueOf(src).Elem()
+
+	// Copy handlers slice
+	srcHandlersField := vsrc.FieldByName("handlers")
+	dstHandlersField := vdst.FieldByName("handlers")
+	if srcHandlersField.IsValid() && dstHandlersField.IsValid() {
+		srcHandlers := reflect.NewAt(srcHandlersField.Type(), unsafe.Pointer(srcHandlersField.UnsafeAddr())).Elem()
+		dstHandlers := reflect.NewAt(dstHandlersField.Type(), unsafe.Pointer(dstHandlersField.UnsafeAddr())).Elem()
+		dstHandlers.Set(srcHandlers)
+	}
+
+	// Copy index
+	srcIndexField := vsrc.FieldByName("index")
+	dstIndexField := vdst.FieldByName("index")
+	if srcIndexField.IsValid() && dstIndexField.IsValid() {
+		srcIndex := reflect.NewAt(srcIndexField.Type(), unsafe.Pointer(srcIndexField.UnsafeAddr())).Elem()
+		dstIndex := reflect.NewAt(dstIndexField.Type(), unsafe.Pointer(dstIndexField.UnsafeAddr())).Elem()
+		dstIndex.Set(srcIndex)
 	}
 }
