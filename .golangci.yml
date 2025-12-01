@@ -33,7 +33,7 @@ linters:
         Main:
           files:
             - $all
-            - '!$test'
+            - "!$test"
           allow:
             - $gostd
             - github.com/gin-gonic/gin
@@ -60,6 +60,7 @@ formatters:
     - gofmt
     - gofumpt
     - goimports
+    - golines
   exclusions:
     generated: lax
     paths:

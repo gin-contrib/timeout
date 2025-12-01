@@ -40,7 +40,9 @@ func main() {
 	r.Use(gin.Logger())
 	r.Use(timeoutMiddleware()) // 1. timeout middleware
 	r.Use(authMiddleware())    // 2. auth middleware
-	r.Use(gin.Recovery())      // recommend to use this middleware to recover from any panics in the handlers.
+	r.Use(
+		gin.Recovery(),
+	) // recommend to use this middleware to recover from any panics in the handlers.
 
 	r.GET("/", func(c *gin.Context) {
 		time.Sleep(1000 * time.Millisecond)

@@ -61,7 +61,13 @@ func TestWriter_Status(t *testing.T) {
 		c.Next()
 		statusInMW := c.Writer.Status()
 		c.Request.Header.Set("X-Status-Code-MW-Set", strconv.Itoa(statusInMW))
-		t.Logf("[%s] %s %s %d\n", time.Now().Format(time.RFC3339), c.Request.Method, c.Request.URL, statusInMW)
+		t.Logf(
+			"[%s] %s %s %d\n",
+			time.Now().Format(time.RFC3339),
+			c.Request.Method,
+			c.Request.URL,
+			statusInMW,
+		)
 	})
 
 	r.GET("/test", func(c *gin.Context) {
@@ -74,7 +80,11 @@ func TestWriter_Status(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.Equal(t, strconv.Itoa(http.StatusInternalServerError), req.Header.Get("X-Status-Code-MW-Set"))
+	assert.Equal(
+		t,
+		strconv.Itoa(http.StatusInternalServerError),
+		req.Header.Get("X-Status-Code-MW-Set"),
+	)
 }
 
 // testNew is a copy of New() with a small change to the timeoutHandler() function.
@@ -245,7 +255,12 @@ func TestWriter_WriteHeaderNow(t *testing.T) {
 	serv := httptest.NewServer(g)
 	defer serv.Close()
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodOptions, serv.URL+"/test", nil)
+	req, err := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodOptions,
+		serv.URL+"/test",
+		nil,
+	)
 	if err != nil {
 		t.Fatal("NewRequest:", err)
 	}
