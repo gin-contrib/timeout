@@ -5,27 +5,42 @@ import (
 	"sync"
 )
 
-// BufferPool represents a pool of buffers.
-// It uses sync.Pool to manage the reuse of buffers, reducing memory allocation and garbage collection overhead.
+// BufferPool represents a pool of buffers with a fast-path cache for the last buffer.
 type BufferPool struct {
 	pool sync.Pool
+	mu   sync.Mutex
+	last *bytes.Buffer
 }
 
-// Get returns a buffer from the buffer pool.
-// If the pool is empty, a new buffer is created and returned.
-// This method ensures the reuse of buffers, improving performance.
+// Get returns a buffer from the buffer pool. It first tries to return the most
+// recently returned buffer without touching sync.Pool to minimize contention.
 func (p *BufferPool) Get() *bytes.Buffer {
+	p.mu.Lock()
+	if p.last != nil {
+		b := p.last
+		p.last = nil
+		p.mu.Unlock()
+		return b
+	}
+	p.mu.Unlock()
+
 	buf := p.pool.Get()
 	if buf == nil {
-		// If there are no available buffers in the pool, create a new one
 		return &bytes.Buffer{}
 	}
-	// Convert the retrieved buffer to *bytes.Buffer type and return it
 	return buf.(*bytes.Buffer)
 }
 
-// Put adds a buffer back to the pool.
-// This method allows the buffer to be reused in the future, reducing the number of memory allocations.
+// Put adds a buffer back to the pool without resetting it. The caller is
+// responsible for calling Reset() when appropriate.
 func (p *BufferPool) Put(buf *bytes.Buffer) {
+	p.mu.Lock()
+	if p.last == nil {
+		p.last = buf
+		p.mu.Unlock()
+		return
+	}
+	p.mu.Unlock()
+
 	p.pool.Put(buf)
 }
