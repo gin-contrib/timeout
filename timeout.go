@@ -50,8 +50,9 @@ func New(opts ...Option) gin.HandlerFunc {
 		c.Writer = tw
 		buffer.Reset()
 
-		// Set a deadline on the request context so handlers can detect
-		// the timeout via c.Request.Context().Done() and exit promptly.
+		// Set a deadline on the request context. This serves two purposes:
+		// 1. Handlers can detect timeout via c.Request.Context().Done()
+		// 2. The middleware uses ctx.Done() to trigger the timeout path
 		ctx, cancel := context.WithTimeout(c.Request.Context(), t.timeout)
 		defer cancel()
 		c.Request = c.Request.WithContext(ctx)
@@ -75,15 +76,11 @@ func New(opts ...Option) gin.HandlerFunc {
 			finish <- struct{}{}
 		}()
 
-		// Use time.NewTimer instead of time.After to allow proper cleanup.
-		timer := time.NewTimer(t.timeout)
-		defer timer.Stop()
-
 		select {
 		case pi := <-panicChan:
-			// Handler panicked: free buffer, restore writer, and print stack trace if in debug mode.
 			// Goroutine is done (deferred recover ran), safe to touch c.
 			tw.FreeBuffer()
+			bufPool.Put(buffer)
 			c.Writer = w
 			// If in debug mode, write error and stack trace to response for easier debugging.
 			if gin.IsDebugging() {
@@ -100,8 +97,7 @@ func New(opts ...Option) gin.HandlerFunc {
 			// In non-debug mode, re-throw the original panic value to be handled by the upper middleware.
 			panic(pi.Value)
 		case <-finish:
-			// Handler finished successfully: flush buffer to response.
-			// Goroutine is done, safe to touch c.
+			// Goroutine is done, safe to touch c. Flush buffer to response.
 			tw.mu.Lock()
 			defer tw.mu.Unlock()
 			dst := tw.ResponseWriter.Header()
@@ -123,20 +119,15 @@ func New(opts ...Option) gin.HandlerFunc {
 			tw.FreeBuffer()
 			bufPool.Put(buffer)
 
-		case <-timer.C:
+		case <-ctx.Done():
 			tw.mu.Lock()
-			// Handler timed out: set timeout flag and clean up
 			tw.timeout = true
 			tw.FreeBuffer()
 			bufPool.Put(buffer)
 			tw.mu.Unlock()
 
-			// Create a fresh context for the timeout response
-			// Important: check if headers were already written
 			timeoutCtx := c.Copy()
 			timeoutCtx.Writer = w
-
-			// Only write timeout response if headers haven't been written to original writer
 			if !w.Written() {
 				t.response(timeoutCtx)
 			}

@@ -270,13 +270,11 @@ func TestWriteAfterTimeout(t *testing.T) {
 		assert.Equal(t, http.StatusRequestTimeout, w1.Code)
 
 		// Request B — fast endpoint, likely reuses the same *gin.Context from pool.
+		// With the goroutine-wait fix, the goroutine is guaranteed done before
+		// ServeHTTP returns, so no sleep is needed.
 		w2 := httptest.NewRecorder()
 		req2, _ := http.NewRequestWithContext(context.Background(), "GET", "/fast", nil)
 		r.ServeHTTP(w2, req2)
-
-		// Give Request A's goroutine time to write (on master it would
-		// write into w2 because c.Writer was reset to &c.writermem).
-		time.Sleep(40 * time.Millisecond)
 
 		// The fast endpoint must return exactly its own data — no leaked prefix.
 		assert.Equal(t, `{"clean":"response"}`, w2.Body.String(),
