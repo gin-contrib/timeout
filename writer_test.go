@@ -299,12 +299,12 @@ func TestStaticFileServing(t *testing.T) {
 
 	dir := t.TempDir()
 	testContent := "hello static file"
-	err := os.WriteFile(filepath.Join(dir, "test.txt"), []byte(testContent), 0o644)
+	err := os.WriteFile(filepath.Join(dir, "test.txt"), []byte(testContent), 0o600)
 	assert.NoError(t, err)
 
 	r := gin.New()
 	r.Use(New(
-		WithTimeout(5 * time.Second),
+		WithTimeout(5*time.Second),
 		WithResponse(testResponse),
 	))
 	r.Static("/static", dir)
