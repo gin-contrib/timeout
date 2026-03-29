@@ -6,7 +6,10 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -272,4 +275,583 @@ func TestWriter_WriteHeaderNow(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 	assert.Equal(t, testOrigin, resp.Header.Get("Access-Control-Allow-Origin"))
 	assert.Equal(t, testMethods, resp.Header.Get("Access-Control-Allow-Methods"))
+}
+
+// TestWriteHeader_MultipleCallsLastWins verifies that WriteHeader can be
+// called multiple times and the last value wins, matching gin's native
+// responseWriter behavior. This is required for r.Static() to work correctly
+// because gin's createStaticHandler calls WriteHeader(404) preemptively,
+// then http.FileServer overrides it with WriteHeader(200).
+func TestWriteHeader_MultipleCallsLastWins(t *testing.T) {
+	writer := Writer{}
+	writer.WriteHeader(http.StatusNotFound)
+	assert.Equal(t, http.StatusNotFound, writer.code)
+
+	writer.WriteHeader(http.StatusOK)
+	assert.Equal(t, http.StatusOK, writer.code)
+	assert.False(t, writer.wroteHeaders, "wroteHeaders should not be set by WriteHeader")
+}
+
+// TestWriteHeader_AfterWriteHeaderNow verifies that WriteHeader is a no-op
+// after WriteHeaderNow has flushed headers.
+func TestWriteHeader_AfterWriteHeaderNow(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+
+	r := gin.New()
+	r.GET("/test", New(
+		WithTimeout(1*time.Second),
+		WithResponse(testResponse),
+	), func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+		c.Writer.WriteHeaderNow()
+		// This call should be ignored since headers are already flushed
+		c.Writer.WriteHeader(http.StatusOK)
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNoContent, w.Code)
+}
+
+// TestWriteHeader_AfterTimeout verifies that WriteHeader is a no-op
+// after a timeout has occurred.
+func TestWriteHeader_AfterTimeout(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+
+	r := gin.New()
+	r.GET("/test", New(
+		WithTimeout(10*time.Millisecond),
+		WithResponse(func(c *gin.Context) {
+			c.String(http.StatusRequestTimeout, "timeout")
+		}),
+	), func(c *gin.Context) {
+		time.Sleep(50 * time.Millisecond)
+		// These should be silently ignored after timeout
+		c.Writer.WriteHeader(http.StatusOK)
+		c.String(http.StatusOK, "should not appear")
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusRequestTimeout, w.Code)
+	assert.Equal(t, "timeout", w.Body.String())
+}
+
+// TestWriteHeaderNow_DefaultStatus verifies that WriteHeaderNow defaults
+// to 200 if no status code has been set.
+func TestWriteHeaderNow_DefaultStatus(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+
+	r := gin.New()
+	r.GET("/test", New(
+		WithTimeout(1*time.Second),
+		WithResponse(testResponse),
+	), func(c *gin.Context) {
+		c.Header("X-Custom", "value")
+		c.Writer.WriteHeaderNow()
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+// TestWriteHeaderNow_Idempotent verifies that calling WriteHeaderNow
+// multiple times only flushes once.
+func TestWriteHeaderNow_Idempotent(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+
+	r := gin.New()
+	r.GET("/test", New(
+		WithTimeout(1*time.Second),
+		WithResponse(testResponse),
+	), func(c *gin.Context) {
+		c.Status(http.StatusCreated)
+		c.Writer.WriteHeaderNow()
+		c.Writer.WriteHeaderNow() // second call should be no-op
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusCreated, w.Code)
+}
+
+// TestWriteHeader_StatusVisibleInMiddleware verifies that after multiple
+// WriteHeader calls, the correct (last) status is visible to downstream middleware.
+func TestWriteHeader_StatusVisibleInMiddleware(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+
+	var statusInMW int
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Next()
+		statusInMW = c.Writer.Status()
+	})
+	r.GET("/test", New(
+		WithTimeout(1*time.Second),
+		WithResponse(testResponse),
+	), func(c *gin.Context) {
+		// Mimic gin's static file pattern: set 404 then override to 200
+		c.Writer.WriteHeader(http.StatusNotFound)
+		c.Writer.WriteHeader(http.StatusOK)
+		c.String(http.StatusOK, "ok")
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, http.StatusOK, statusInMW)
+	assert.Equal(t, "ok", w.Body.String())
+}
+
+// TestWriteHeader_VariousOverrides verifies WriteHeader override works
+// with different status code combinations using route-level middleware.
+func TestWriteHeader_VariousOverrides(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+
+	tests := []struct {
+		name     string
+		first    int
+		second   int
+		expected int
+	}{
+		{"404 to 200", http.StatusNotFound, http.StatusOK, http.StatusOK},
+		{"500 to 200", http.StatusInternalServerError, http.StatusOK, http.StatusOK},
+		{"200 to 301", http.StatusOK, http.StatusMovedPermanently, http.StatusMovedPermanently},
+		{"403 to 401", http.StatusForbidden, http.StatusUnauthorized, http.StatusUnauthorized},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := gin.New()
+			r.GET("/test", New(
+				WithTimeout(1*time.Second),
+				WithResponse(testResponse),
+			), func(c *gin.Context) {
+				c.Writer.WriteHeader(tt.first)
+				c.Writer.WriteHeader(tt.second)
+			})
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			r.ServeHTTP(w, req)
+
+			assert.Equal(t, tt.expected, w.Code)
+		})
+	}
+}
+
+// TestWriteHeader_OverrideWithBody verifies that WriteHeader override
+// works correctly when the handler also writes a response body.
+func TestWriteHeader_OverrideWithBody(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+
+	r := gin.New()
+	r.GET("/test", New(
+		WithTimeout(1*time.Second),
+		WithResponse(testResponse),
+	), func(c *gin.Context) {
+		// Mimic gin's static file pattern: pre-set 404, then serve with 200
+		c.Writer.WriteHeader(http.StatusNotFound)
+		c.Writer.WriteHeader(http.StatusOK)
+		c.Writer.Header().Set("Content-Type", "text/plain")
+		_, _ = c.Writer.Write([]byte("file content here"))
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "file content here", w.Body.String())
+	assert.Equal(t, "text/plain", w.Header().Get("Content-Type"))
+}
+
+// TestWriteHeader_JSONResponse verifies that WriteHeader works correctly
+// with JSON responses using route-level middleware.
+func TestWriteHeader_JSONResponse(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+
+	tests := []struct {
+		name     string
+		code     int
+		body     interface{}
+		expected string
+	}{
+		{
+			"200 JSON",
+			http.StatusOK,
+			gin.H{"status": "ok"},
+			`{"status":"ok"}`,
+		},
+		{
+			"201 JSON",
+			http.StatusCreated,
+			gin.H{"id": 1},
+			`{"id":1}`,
+		},
+		{
+			"400 JSON error",
+			http.StatusBadRequest,
+			gin.H{"error": "bad request"},
+			`{"error":"bad request"}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := gin.New()
+			r.GET("/test", New(
+				WithTimeout(1*time.Second),
+				WithResponse(testResponse),
+			), func(c *gin.Context) {
+				c.JSON(tt.code, tt.body)
+			})
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			r.ServeHTTP(w, req)
+
+			assert.Equal(t, tt.code, w.Code)
+			assert.JSONEq(t, tt.expected, w.Body.String())
+		})
+	}
+}
+
+// TestWriteHeader_NoResponse verifies that a handler with no explicit
+// response returns 200 using route-level middleware.
+func TestWriteHeader_NoResponse(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+
+	r := gin.New()
+	r.GET("/test", New(
+		WithTimeout(1*time.Second),
+		WithResponse(testResponse),
+	), func(c *gin.Context) {
+		// handler does nothing
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+// TestWriteHeader_AbortWithStatus verifies that AbortWithStatus works
+// correctly with route-level timeout middleware.
+func TestWriteHeader_AbortWithStatus(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+
+	r := gin.New()
+	r.GET("/test", New(
+		WithTimeout(1*time.Second),
+		WithResponse(testResponse),
+	), func(c *gin.Context) {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.JSONEq(t, `{"error":"forbidden"}`, w.Body.String())
+}
+
+// TestStaticFileServing verifies that static files served via r.Static()
+// return the correct HTTP status code (200) along with the file content.
+// Reproduces https://github.com/gin-contrib/timeout/issues/68
+func TestStaticFileServing(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+
+	dir := t.TempDir()
+	testContent := "hello static file"
+	err := os.WriteFile(filepath.Join(dir, "test.txt"), []byte(testContent), 0o600)
+	assert.NoError(t, err)
+
+	r := gin.New()
+	r.Use(New(
+		WithTimeout(5*time.Second),
+		WithResponse(testResponse),
+	))
+	r.Static("/static", dir)
+
+	// existing file should return 200 with correct body
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/static/test.txt", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, testContent, w.Body.String())
+
+	// non-existent file should return 404
+	w2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodGet, "/static/nonexistent.txt", nil)
+	r.ServeHTTP(w2, req2)
+
+	assert.Equal(t, http.StatusNotFound, w2.Code)
+}
+
+// TestStaticFileServing_GroupLevel verifies that static files work correctly
+// when the timeout middleware is applied at the group level.
+func TestStaticFileServing_GroupLevel(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+
+	dir := t.TempDir()
+	testContent := "group level static"
+	err := os.WriteFile(filepath.Join(dir, "test.txt"), []byte(testContent), 0o600)
+	assert.NoError(t, err)
+
+	r := gin.New()
+	g := r.Group("/files", New(
+		WithTimeout(5*time.Second),
+		WithResponse(testResponse),
+	))
+	g.Static("/static", dir)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/files/static/test.txt", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, testContent, w.Body.String())
+}
+
+// TestStaticFileServing_ContentTypeHeader verifies that Content-Type header
+// is correctly propagated when serving static files through the timeout middleware.
+func TestStaticFileServing_ContentTypeHeader(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+
+	dir := t.TempDir()
+	err := os.WriteFile(filepath.Join(dir, "data.json"), []byte(`{"key":"value"}`), 0o600)
+	assert.NoError(t, err)
+	htmlContent := `<html><body>hello</body></html>`
+	err = os.WriteFile(filepath.Join(dir, "page.html"), []byte(htmlContent), 0o600)
+	assert.NoError(t, err)
+
+	r := gin.New()
+	r.Use(New(
+		WithTimeout(5*time.Second),
+		WithResponse(testResponse),
+	))
+	r.Static("/static", dir)
+
+	// JSON file
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/static/data.json", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Header().Get("Content-Type"), "application/json")
+	assert.Equal(t, `{"key":"value"}`, w.Body.String())
+
+	// HTML file
+	w2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodGet, "/static/page.html", nil)
+	r.ServeHTTP(w2, req2)
+
+	assert.Equal(t, http.StatusOK, w2.Code)
+	assert.Contains(t, w2.Header().Get("Content-Type"), "text/html")
+}
+
+// TestStaticFileServing_Concurrent verifies that concurrent static file
+// requests work correctly with the timeout middleware and race detector.
+func TestStaticFileServing_Concurrent(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+
+	dir := t.TempDir()
+	files := map[string]string{
+		"a.txt": "content-a",
+		"b.txt": "content-b",
+		"c.txt": "content-c",
+	}
+	for name, content := range files {
+		err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600)
+		assert.NoError(t, err)
+	}
+
+	r := gin.New()
+	r.Use(New(
+		WithTimeout(5*time.Second),
+		WithResponse(testResponse),
+	))
+	r.Static("/static", dir)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		for name, expectedContent := range files {
+			wg.Add(1)
+			go func(name, expectedContent string) {
+				defer wg.Done()
+				w := httptest.NewRecorder()
+				req := httptest.NewRequest(http.MethodGet, "/static/"+name, nil)
+				r.ServeHTTP(w, req)
+				assert.Equal(t, http.StatusOK, w.Code,
+					"file %s should return 200", name)
+				assert.Equal(t, expectedContent, w.Body.String(),
+					"file %s should return correct content", name)
+			}(name, expectedContent)
+		}
+	}
+	wg.Wait()
+}
+
+// TestStaticFileServing_WithTimeout verifies that static file serving
+// correctly returns a timeout response when the request takes too long.
+func TestStaticFileServing_WithTimeout(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+
+	dir := t.TempDir()
+	err := os.WriteFile(filepath.Join(dir, "test.txt"), []byte("content"), 0o600)
+	assert.NoError(t, err)
+
+	r := gin.New()
+	r.Use(New(
+		WithTimeout(10*time.Millisecond),
+		WithResponse(func(c *gin.Context) {
+			c.String(http.StatusRequestTimeout, "timeout")
+		}),
+	))
+	// Add a slow middleware before static to force a timeout
+	r.Use(func(c *gin.Context) {
+		time.Sleep(50 * time.Millisecond)
+		c.Next()
+	})
+	r.Static("/static", dir)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/static/test.txt", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusRequestTimeout, w.Code)
+	assert.Equal(t, "timeout", w.Body.String())
+}
+
+// TestRouteLevel_TimeoutFires verifies that route-level timeout middleware
+// returns the timeout response when the handler exceeds the deadline.
+func TestRouteLevel_TimeoutFires(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+
+	r := gin.New()
+	r.GET("/slow", New(
+		WithTimeout(50*time.Microsecond),
+		WithResponse(func(c *gin.Context) {
+			c.String(http.StatusRequestTimeout, "too slow")
+		}),
+	), func(c *gin.Context) {
+		time.Sleep(200 * time.Microsecond)
+		c.String(http.StatusOK, "done")
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/slow", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusRequestTimeout, w.Code)
+	assert.Equal(t, "too slow", w.Body.String())
+}
+
+// TestRouteLevel_SuccessBeforeTimeout verifies that route-level timeout
+// middleware returns the handler's response when it completes in time.
+func TestRouteLevel_SuccessBeforeTimeout(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+
+	r := gin.New()
+	r.GET("/fast", New(
+		WithTimeout(1*time.Second),
+		WithResponse(func(c *gin.Context) {
+			c.String(http.StatusRequestTimeout, "too slow")
+		}),
+	), func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"result": "success"})
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/fast", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.JSONEq(t, `{"result":"success"}`, w.Body.String())
+}
+
+// TestRouteLevel_MultipleRoutes verifies that different routes can have
+// different timeout configurations applied at the route level.
+func TestRouteLevel_MultipleRoutes(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+
+	r := gin.New()
+
+	// Fast route with short timeout — handler completes in time
+	r.GET("/fast", New(
+		WithTimeout(1*time.Second),
+		WithResponse(func(c *gin.Context) {
+			c.String(http.StatusRequestTimeout, "fast timeout")
+		}),
+	), func(c *gin.Context) {
+		c.String(http.StatusOK, "fast ok")
+	})
+
+	// Slow route with short timeout — handler exceeds deadline
+	r.GET("/slow", New(
+		WithTimeout(10*time.Millisecond),
+		WithResponse(func(c *gin.Context) {
+			c.String(http.StatusGatewayTimeout, "slow timeout")
+		}),
+	), func(c *gin.Context) {
+		time.Sleep(50 * time.Millisecond)
+		c.String(http.StatusOK, "slow ok")
+	})
+
+	// Fast route succeeds
+	w1 := httptest.NewRecorder()
+	req1 := httptest.NewRequest(http.MethodGet, "/fast", nil)
+	r.ServeHTTP(w1, req1)
+	assert.Equal(t, http.StatusOK, w1.Code)
+	assert.Equal(t, "fast ok", w1.Body.String())
+
+	// Slow route times out
+	w2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodGet, "/slow", nil)
+	r.ServeHTTP(w2, req2)
+	assert.Equal(t, http.StatusGatewayTimeout, w2.Code)
+	assert.Equal(t, "slow timeout", w2.Body.String())
+}
+
+// TestRouteLevel_ConcurrentRequests verifies that route-level timeout
+// handles concurrent requests without data races.
+func TestRouteLevel_ConcurrentRequests(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+
+	r := gin.New()
+	r.GET("/test", New(
+		WithTimeout(1*time.Second),
+		WithResponse(testResponse),
+	), func(c *gin.Context) {
+		c.String(http.StatusOK, "hello")
+	})
+
+	var wg sync.WaitGroup
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			r.ServeHTTP(w, req)
+			assert.Equal(t, http.StatusOK, w.Code)
+			assert.Equal(t, "hello", w.Body.String())
+		}()
+	}
+	wg.Wait()
 }

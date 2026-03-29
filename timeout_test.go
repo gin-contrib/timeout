@@ -13,14 +13,14 @@ import (
 )
 
 func emptySuccessResponse(c *gin.Context) {
-	time.Sleep(200 * time.Microsecond)
+	time.Sleep(20 * time.Millisecond)
 	c.String(http.StatusOK, "")
 }
 
 func TestTimeout(t *testing.T) {
 	r := gin.New()
 	r.GET("/", New(
-		WithTimeout(50*time.Microsecond),
+		WithTimeout(5*time.Millisecond),
 	),
 		emptySuccessResponse,
 	)
@@ -36,7 +36,7 @@ func TestTimeout(t *testing.T) {
 func TestTimeoutWithUse(t *testing.T) {
 	r := gin.New()
 	r.Use(New(
-		WithTimeout(50 * time.Microsecond),
+		WithTimeout(5 * time.Millisecond),
 	))
 	r.GET("/", emptySuccessResponse)
 
@@ -51,7 +51,7 @@ func TestTimeoutWithUse(t *testing.T) {
 func TestWithoutTimeout(t *testing.T) {
 	r := gin.New()
 	r.GET("/", New(
-		WithTimeout(-1*time.Microsecond),
+		WithTimeout(-1*time.Millisecond),
 	),
 		emptySuccessResponse,
 	)
@@ -71,7 +71,7 @@ func testResponse(c *gin.Context) {
 func TestCustomResponse(t *testing.T) {
 	r := gin.New()
 	r.GET("/", New(
-		WithTimeout(100*time.Microsecond),
+		WithTimeout(5*time.Millisecond),
 		WithResponse(testResponse),
 	),
 		emptySuccessResponse,
@@ -86,7 +86,7 @@ func TestCustomResponse(t *testing.T) {
 }
 
 func emptySuccessResponse2(c *gin.Context) {
-	time.Sleep(50 * time.Microsecond)
+	time.Sleep(1 * time.Millisecond)
 	c.String(http.StatusOK, "")
 }
 
@@ -110,18 +110,16 @@ func TestSuccess(t *testing.T) {
 func TestLargeResponse(t *testing.T) {
 	r := gin.New()
 	r.GET("/slow", New(
-		WithTimeout(1*time.Second),
+		WithTimeout(50*time.Millisecond),
 		WithResponse(func(c *gin.Context) {
 			c.String(http.StatusRequestTimeout, `{"error": "timeout error"}`)
 		}),
 	),
 		func(c *gin.Context) {
-			// Use context-aware wait so the handler exits promptly after timeout
-			select {
-			case <-time.After(2 * time.Second):
-			case <-c.Request.Context().Done():
-				return
-			}
+			// Sleep longer than the timeout to ensure the timeout path is always taken.
+			// Do NOT use context cancellation here because ctx.Done() fires at the same
+			// time as the timer, making the select nondeterministic.
+			time.Sleep(200 * time.Millisecond)
 			c.String(http.StatusBadRequest, `{"error": "handler error"}`)
 		},
 	)
