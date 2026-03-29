@@ -25,13 +25,13 @@ jobs:
       - name: Setup golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.6
+          version: v2.9
           args: --verbose
   test:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        go: [1.24, 1.25]
+        go: [1.25, 1.26]
         race: [true, false]
         include:
           - os: ubuntu-latest
@@ -52,7 +52,7 @@ jobs:
         with:
           ref: ${{ github.ref }}
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: |
             ${{ matrix.go-build }}
@@ -69,6 +69,6 @@ jobs:
           fi
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           flags: "${{ matrix.os }},go-${{ matrix.go }},race-${{ matrix.race }}"
