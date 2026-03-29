@@ -745,12 +745,12 @@ func TestRouteLevel_TimeoutFires(t *testing.T) {
 
 	r := gin.New()
 	r.GET("/slow", New(
-		WithTimeout(50*time.Microsecond),
+		WithTimeout(50*time.Millisecond),
 		WithResponse(func(c *gin.Context) {
 			c.String(http.StatusRequestTimeout, "too slow")
 		}),
 	), func(c *gin.Context) {
-		time.Sleep(200 * time.Microsecond)
+		time.Sleep(200 * time.Millisecond)
 		c.String(http.StatusOK, "done")
 	})
 
