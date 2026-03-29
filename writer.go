@@ -26,10 +26,9 @@ func NewWriter(w gin.ResponseWriter, buf *bytes.Buffer) *Writer {
 	return &Writer{ResponseWriter: w, body: buf, headers: make(http.Header)}
 }
 
-// WriteHeaderNow the reason why we override this func is:
-// once calling the func WriteHeaderNow() of based gin.ResponseWriter,
-// this Writer can no longer apply the cached headers to the based
-// gin.ResponseWriter. see test case `TestWriter_WriteHeaderNow` for details.
+// WriteHeaderNow flushes cached headers and the status code to the
+// underlying ResponseWriter immediately. After this call, WriteHeader
+// becomes a no-op. See test case `TestWriter_WriteHeaderNow` for details.
 func (w *Writer) WriteHeaderNow() {
 	if !w.wroteHeaders {
 		if w.code == 0 {
@@ -42,13 +41,16 @@ func (w *Writer) WriteHeaderNow() {
 			dst[k] = vv
 		}
 
-		w.WriteHeader(w.code)
+		w.wroteHeaders = true
+		w.ResponseWriter.WriteHeader(w.code)
 	}
 }
 
-// WriteHeader sends an HTTP response header with the provided status code.
-// If the response writer has already written headers or if a timeout has occurred,
-// this method does nothing.
+// WriteHeader stores the HTTP status code for later use.
+// Multiple calls are allowed — the last value before flush wins,
+// matching gin's native responseWriter behavior.
+// If headers have already been flushed (via WriteHeaderNow) or
+// a timeout has occurred, this method does nothing.
 func (w *Writer) WriteHeader(code int) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -64,19 +66,6 @@ func (w *Writer) WriteHeader(code int) {
 	}
 
 	checkWriteHeaderCode(code)
-
-	// Copy headers from our cache to the underlying ResponseWriter
-	dst := w.ResponseWriter.Header()
-	for k, vv := range w.headers {
-		dst[k] = vv
-	}
-
-	w.writeHeader(code)
-	w.ResponseWriter.WriteHeader(code)
-}
-
-func (w *Writer) writeHeader(code int) {
-	w.wroteHeaders = true
 	w.code = code
 }
 

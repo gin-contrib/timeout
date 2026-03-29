@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
@@ -272,4 +274,53 @@ func TestWriter_WriteHeaderNow(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 	assert.Equal(t, testOrigin, resp.Header.Get("Access-Control-Allow-Origin"))
 	assert.Equal(t, testMethods, resp.Header.Get("Access-Control-Allow-Methods"))
+}
+
+// TestWriteHeader_MultipleCallsLastWins verifies that WriteHeader can be
+// called multiple times and the last value wins, matching gin's native
+// responseWriter behavior. This is required for r.Static() to work correctly
+// because gin's createStaticHandler calls WriteHeader(404) preemptively,
+// then http.FileServer overrides it with WriteHeader(200).
+func TestWriteHeader_MultipleCallsLastWins(t *testing.T) {
+	writer := Writer{}
+	writer.WriteHeader(http.StatusNotFound)
+	assert.Equal(t, http.StatusNotFound, writer.code)
+
+	writer.WriteHeader(http.StatusOK)
+	assert.Equal(t, http.StatusOK, writer.code)
+	assert.False(t, writer.wroteHeaders, "wroteHeaders should not be set by WriteHeader")
+}
+
+// TestStaticFileServing verifies that static files served via r.Static()
+// return the correct HTTP status code (200) along with the file content.
+// Reproduces https://github.com/gin-contrib/timeout/issues/68
+func TestStaticFileServing(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+
+	dir := t.TempDir()
+	testContent := "hello static file"
+	err := os.WriteFile(filepath.Join(dir, "test.txt"), []byte(testContent), 0o644)
+	assert.NoError(t, err)
+
+	r := gin.New()
+	r.Use(New(
+		WithTimeout(5 * time.Second),
+		WithResponse(testResponse),
+	))
+	r.Static("/static", dir)
+
+	// existing file should return 200 with correct body
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/static/test.txt", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, testContent, w.Body.String())
+
+	// non-existent file should return 404
+	w2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodGet, "/static/nonexistent.txt", nil)
+	r.ServeHTTP(w2, req2)
+
+	assert.Equal(t, http.StatusNotFound, w2.Code)
 }
