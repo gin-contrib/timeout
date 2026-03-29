@@ -13,14 +13,14 @@ import (
 )
 
 func emptySuccessResponse(c *gin.Context) {
-	time.Sleep(200 * time.Microsecond)
+	time.Sleep(20 * time.Millisecond)
 	c.String(http.StatusOK, "")
 }
 
 func TestTimeout(t *testing.T) {
 	r := gin.New()
 	r.GET("/", New(
-		WithTimeout(50*time.Microsecond),
+		WithTimeout(5*time.Millisecond),
 	),
 		emptySuccessResponse,
 	)
@@ -36,7 +36,7 @@ func TestTimeout(t *testing.T) {
 func TestTimeoutWithUse(t *testing.T) {
 	r := gin.New()
 	r.Use(New(
-		WithTimeout(50 * time.Microsecond),
+		WithTimeout(5 * time.Millisecond),
 	))
 	r.GET("/", emptySuccessResponse)
 
@@ -51,7 +51,7 @@ func TestTimeoutWithUse(t *testing.T) {
 func TestWithoutTimeout(t *testing.T) {
 	r := gin.New()
 	r.GET("/", New(
-		WithTimeout(-1*time.Microsecond),
+		WithTimeout(-1*time.Millisecond),
 	),
 		emptySuccessResponse,
 	)
@@ -71,7 +71,7 @@ func testResponse(c *gin.Context) {
 func TestCustomResponse(t *testing.T) {
 	r := gin.New()
 	r.GET("/", New(
-		WithTimeout(100*time.Microsecond),
+		WithTimeout(5*time.Millisecond),
 		WithResponse(testResponse),
 	),
 		emptySuccessResponse,
@@ -86,7 +86,7 @@ func TestCustomResponse(t *testing.T) {
 }
 
 func emptySuccessResponse2(c *gin.Context) {
-	time.Sleep(50 * time.Microsecond)
+	time.Sleep(1 * time.Millisecond)
 	c.String(http.StatusOK, "")
 }
 
