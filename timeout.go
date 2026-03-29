@@ -1,6 +1,7 @@
 package timeout
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"runtime/debug"
@@ -49,10 +50,11 @@ func New(opts ...Option) gin.HandlerFunc {
 		c.Writer = tw
 		buffer.Reset()
 
-		// Create a copy of the context before starting the goroutine to avoid data race
-		cCopy := c.Copy()
-		// Set the copied context's writer to our timeout writer to ensure proper buffering
-		cCopy.Writer = tw
+		// Set a deadline on the request context so handlers can detect
+		// the timeout via c.Request.Context().Done() and exit promptly.
+		ctx, cancel := context.WithTimeout(c.Request.Context(), t.timeout)
+		defer cancel()
+		c.Request = c.Request.WithContext(ctx)
 
 		// Channel to signal handler completion.
 		finish := make(chan struct{}, 1)
@@ -69,15 +71,20 @@ func New(opts ...Option) gin.HandlerFunc {
 					}
 				}
 			}()
-			// Use the copied context to avoid data race when running handler in a goroutine.
 			c.Next()
 			finish <- struct{}{}
 		}()
 
+		// Use time.NewTimer for the select trigger — it has lower latency than
+		// ctx.Done() which runs AfterFunc in a separate goroutine.
+		timer := time.NewTimer(t.timeout)
+		defer timer.Stop()
+
 		select {
 		case pi := <-panicChan:
-			// Handler panicked: free buffer, restore writer, and print stack trace if in debug mode.
+			// Goroutine is done (deferred recover ran), safe to touch c.
 			tw.FreeBuffer()
+			bufPool.Put(buffer)
 			c.Writer = w
 			// If in debug mode, write error and stack trace to response for easier debugging.
 			if gin.IsDebugging() {
@@ -94,7 +101,7 @@ func New(opts ...Option) gin.HandlerFunc {
 			// In non-debug mode, re-throw the original panic value to be handled by the upper middleware.
 			panic(pi.Value)
 		case <-finish:
-			// Handler finished successfully: flush buffer to response.
+			// Goroutine is done, safe to touch c. Flush buffer to response.
 			tw.mu.Lock()
 			defer tw.mu.Unlock()
 			dst := tw.ResponseWriter.Header()
@@ -116,25 +123,30 @@ func New(opts ...Option) gin.HandlerFunc {
 			tw.FreeBuffer()
 			bufPool.Put(buffer)
 
-		case <-time.After(t.timeout):
+		case <-timer.C:
 			tw.mu.Lock()
-			// Handler timed out: set timeout flag and clean up
 			tw.timeout = true
 			tw.FreeBuffer()
 			bufPool.Put(buffer)
 			tw.mu.Unlock()
 
-			// Create a fresh context for the timeout response
-			// Important: check if headers were already written
 			timeoutCtx := c.Copy()
 			timeoutCtx.Writer = w
-
-			// Only write timeout response if headers haven't been written to original writer
 			if !w.Written() {
 				t.response(timeoutCtx)
 			}
-			// Abort the context to prevent further middleware execution after timeout
-			c.AbortWithStatus(http.StatusRequestTimeout)
+
+			// Wait for the goroutine to finish to avoid data race on c.index.
+			// The context deadline has already fired, so well-behaved handlers
+			// that check c.Request.Context().Done() will exit promptly.
+			// The tw.timeout flag causes all handler writes to be discarded.
+			select {
+			case <-finish:
+			case <-panicChan:
+			}
+
+			// Goroutine is done. Safe to modify c.index now.
+			c.Abort()
 		}
 	}
 }

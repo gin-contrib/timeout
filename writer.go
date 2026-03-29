@@ -102,9 +102,7 @@ func (w *Writer) Write(data []byte) (int, error) {
 
 // WriteString will write string to response body
 func (w *Writer) WriteString(s string) (int, error) {
-	n, err := w.Write([]byte(s))
-	w.size += n
-	return n, err
+	return w.Write([]byte(s))
 }
 
 func (w *Writer) Size() int {

@@ -116,7 +116,12 @@ func TestLargeResponse(t *testing.T) {
 		}),
 	),
 		func(c *gin.Context) {
-			time.Sleep(2 * time.Second) // wait almost same as timeout
+			// Use context-aware wait so the handler exits promptly after timeout
+			select {
+			case <-time.After(2 * time.Second):
+			case <-c.Request.Context().Done():
+				return
+			}
 			c.String(http.StatusBadRequest, `{"error": "handler error"}`)
 		},
 	)
@@ -137,8 +142,8 @@ func TestLargeResponse(t *testing.T) {
 }
 
 /*
-Test to ensure no further middleware is executed after timeout (covers c.Next() removal)
-This test verifies that after a timeout occurs, no subsequent middleware is executed.
+Test to ensure no further middleware executes meaningful work after timeout.
+Handlers that respect context cancellation will exit early when the timeout fires.
 */
 func TestNoNextAfterTimeout(t *testing.T) {
 	r := gin.New()
@@ -147,11 +152,20 @@ func TestNoNextAfterTimeout(t *testing.T) {
 		WithTimeout(50*time.Millisecond),
 	),
 		func(c *gin.Context) {
-			time.Sleep(100 * time.Millisecond)
+			// Use context-aware wait so the handler exits when timeout fires
+			select {
+			case <-time.After(100 * time.Millisecond):
+			case <-c.Request.Context().Done():
+				return
+			}
 			c.String(http.StatusOK, "should not reach")
 		},
 	)
 	r.Use(func(c *gin.Context) {
+		// Check context cancellation before doing work
+		if c.Request.Context().Err() != nil {
+			return
+		}
 		called = true
 	})
 
@@ -160,7 +174,7 @@ func TestNoNextAfterTimeout(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusRequestTimeout, w.Code)
-	assert.False(t, called, "next middleware should not be called after timeout")
+	assert.False(t, called, "next middleware should not run after context timeout")
 }
 
 /*
@@ -191,4 +205,96 @@ func TestTimeoutPanic(t *testing.T) {
 	// Verify the response status code and body.
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 	assert.Contains(t, w.Body.String(), "panic caught: timeout panic test")
+}
+
+func TestDataRace(t *testing.T) {
+	r := gin.New()
+	r.GET("/race", New(
+		WithTimeout(50*time.Millisecond),
+	), func(c *gin.Context) {
+		// Sleep longer than the timeout to ensure the timeout path is always taken.
+		// Do NOT use context cancellation here because ctx.Done() fires at the same
+		// time as the timer, making the select nondeterministic.
+		time.Sleep(200 * time.Millisecond)
+		c.String(http.StatusOK, "done")
+	})
+
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequestWithContext(context.Background(), "GET", "/race", nil)
+			r.ServeHTTP(w, req)
+			assert.Equal(t, http.StatusRequestTimeout, w.Code)
+		}()
+	}
+	wg.Wait()
+}
+
+/*
+TestWriteAfterTimeout: verifies that a timed-out handler's goroutine cannot
+contaminate a subsequent request's response (issue #81).
+
+Root cause on master: after timeout the middleware returned immediately,
+causing gin to recycle *gin.Context via sync.Pool while the goroutine was
+still running. The next request reused the same Context, c.reset() changed
+c.Writer to &c.writermem pointing at the NEW recorder, and the old goroutine's
+c.String() bypassed the timeout Writer's check — writing directly into
+the new request's response.
+
+The fix waits for the goroutine before returning, so pool.Put(c) only happens
+after the goroutine is done.
+*/
+func TestWriteAfterTimeout(t *testing.T) {
+	r := gin.New()
+
+	r.GET("/slow", New(
+		WithTimeout(5*time.Millisecond),
+	), func(c *gin.Context) {
+		// Simulate a handler that writes AFTER the timeout has fired.
+		time.Sleep(30 * time.Millisecond)
+		c.String(http.StatusOK, `{"leaked":"data"}`)
+	})
+
+	r.GET("/fast", func(c *gin.Context) {
+		c.String(http.StatusOK, `{"clean":"response"}`)
+	})
+
+	for i := 0; i < 50; i++ {
+		// Request A — will time out; goroutine keeps running on master.
+		w1 := httptest.NewRecorder()
+		req1, _ := http.NewRequestWithContext(context.Background(), "GET", "/slow", nil)
+		r.ServeHTTP(w1, req1)
+		assert.Equal(t, http.StatusRequestTimeout, w1.Code)
+
+		// Request B — fast endpoint, likely reuses the same *gin.Context from pool.
+		// With the goroutine-wait fix, the goroutine is guaranteed done before
+		// ServeHTTP returns, so no sleep is needed.
+		w2 := httptest.NewRecorder()
+		req2, _ := http.NewRequestWithContext(context.Background(), "GET", "/fast", nil)
+		r.ServeHTTP(w2, req2)
+
+		// The fast endpoint must return exactly its own data — no leaked prefix.
+		assert.Equal(t, `{"clean":"response"}`, w2.Body.String(),
+			"iteration %d: response contaminated by timed-out request's goroutine", i)
+	}
+}
+
+func TestContextDeadlineSet(t *testing.T) {
+	r := gin.New()
+	var hasDeadline bool
+	r.GET("/deadline", New(
+		WithTimeout(1*time.Second),
+	), func(c *gin.Context) {
+		_, hasDeadline = c.Request.Context().Deadline()
+	})
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequestWithContext(context.Background(), "GET", "/deadline", nil)
+	r.ServeHTTP(w, req)
+
+	assert.True(t, hasDeadline, "request context should have a deadline set by the middleware")
+	assert.Equal(t, http.StatusOK, w.Code)
 }

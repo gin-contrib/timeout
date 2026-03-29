@@ -17,7 +17,8 @@ func TestBufferPool(t *testing.T) {
 	pool.Put(buf)
 	buf2 := pool.Get()
 	assert.NotNil(t, buf2)
-	assert.Same(t, buf, buf2)
+	// Note: sync.Pool does not guarantee that Get returns the same object
+	// that was Put, as the GC may collect pool entries at any time.
 }
 
 func TestBufferPool_Concurrent(t *testing.T) {
@@ -51,17 +52,19 @@ func TestBufferPool_Concurrent(t *testing.T) {
 func TestBufferPool_NoReset(t *testing.T) {
 	t.Parallel()
 
-	// This test demonstrates that it is the responsibility of the
-	// caller to reset the buffer before putting it back into the pool.
+	// This test demonstrates that buffers are not automatically reset
+	// by the pool. The caller is responsible for resetting them.
 	pool := &BufferPool{}
 
-	// Get a buffer, write to it, and put it back without resetting.
 	buf := pool.Get()
 	buf.WriteString("hello")
-	pool.Put(buf)
+	assert.Equal(t, "hello", buf.String())
 
-	// Get the buffer again and check if the old content is still there.
+	// After reset, buffer should be empty
+	buf.Reset()
+	assert.Equal(t, "", buf.String())
+
+	pool.Put(buf)
 	buf2 := pool.Get()
-	assert.Same(t, buf, buf2)
-	assert.Equal(t, "hello", buf2.String())
+	assert.NotNil(t, buf2)
 }
