@@ -110,18 +110,16 @@ func TestSuccess(t *testing.T) {
 func TestLargeResponse(t *testing.T) {
 	r := gin.New()
 	r.GET("/slow", New(
-		WithTimeout(1*time.Second),
+		WithTimeout(50*time.Millisecond),
 		WithResponse(func(c *gin.Context) {
 			c.String(http.StatusRequestTimeout, `{"error": "timeout error"}`)
 		}),
 	),
 		func(c *gin.Context) {
-			// Use context-aware wait so the handler exits promptly after timeout
-			select {
-			case <-time.After(2 * time.Second):
-			case <-c.Request.Context().Done():
-				return
-			}
+			// Sleep longer than the timeout to ensure the timeout path is always taken.
+			// Do NOT use context cancellation here because ctx.Done() fires at the same
+			// time as the timer, making the select nondeterministic.
+			time.Sleep(200 * time.Millisecond)
 			c.String(http.StatusBadRequest, `{"error": "handler error"}`)
 		},
 	)
