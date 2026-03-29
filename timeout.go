@@ -50,9 +50,8 @@ func New(opts ...Option) gin.HandlerFunc {
 		c.Writer = tw
 		buffer.Reset()
 
-		// Set a deadline on the request context. This serves two purposes:
-		// 1. Handlers can detect timeout via c.Request.Context().Done()
-		// 2. The middleware uses ctx.Done() to trigger the timeout path
+		// Set a deadline on the request context so handlers can detect
+		// the timeout via c.Request.Context().Done() and exit promptly.
 		ctx, cancel := context.WithTimeout(c.Request.Context(), t.timeout)
 		defer cancel()
 		c.Request = c.Request.WithContext(ctx)
@@ -75,6 +74,11 @@ func New(opts ...Option) gin.HandlerFunc {
 			c.Next()
 			finish <- struct{}{}
 		}()
+
+		// Use time.NewTimer for the select trigger — it has lower latency than
+		// ctx.Done() which runs AfterFunc in a separate goroutine.
+		timer := time.NewTimer(t.timeout)
+		defer timer.Stop()
 
 		select {
 		case pi := <-panicChan:
@@ -119,7 +123,7 @@ func New(opts ...Option) gin.HandlerFunc {
 			tw.FreeBuffer()
 			bufPool.Put(buffer)
 
-		case <-ctx.Done():
+		case <-timer.C:
 			tw.mu.Lock()
 			tw.timeout = true
 			tw.FreeBuffer()
