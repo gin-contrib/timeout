@@ -636,7 +636,8 @@ func TestStaticFileServing_ContentTypeHeader(t *testing.T) {
 	dir := t.TempDir()
 	err := os.WriteFile(filepath.Join(dir, "data.json"), []byte(`{"key":"value"}`), 0o600)
 	assert.NoError(t, err)
-	err = os.WriteFile(filepath.Join(dir, "page.html"), []byte(`<html><body>hello</body></html>`), 0o600)
+	htmlContent := `<html><body>hello</body></html>`
+	err = os.WriteFile(filepath.Join(dir, "page.html"), []byte(htmlContent), 0o600)
 	assert.NoError(t, err)
 
 	r := gin.New()
