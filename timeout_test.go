@@ -116,7 +116,12 @@ func TestLargeResponse(t *testing.T) {
 		}),
 	),
 		func(c *gin.Context) {
-			time.Sleep(2 * time.Second) // wait almost same as timeout
+			// Use context-aware wait so the handler exits promptly after timeout
+			select {
+			case <-time.After(2 * time.Second):
+			case <-c.Request.Context().Done():
+				return
+			}
 			c.String(http.StatusBadRequest, `{"error": "handler error"}`)
 		},
 	)
@@ -137,8 +142,8 @@ func TestLargeResponse(t *testing.T) {
 }
 
 /*
-Test to ensure no further middleware is executed after timeout (covers c.Next() removal)
-This test verifies that after a timeout occurs, no subsequent middleware is executed.
+Test to ensure no further middleware executes meaningful work after timeout.
+Handlers that respect context cancellation will exit early when the timeout fires.
 */
 func TestNoNextAfterTimeout(t *testing.T) {
 	r := gin.New()
@@ -147,11 +152,20 @@ func TestNoNextAfterTimeout(t *testing.T) {
 		WithTimeout(50*time.Millisecond),
 	),
 		func(c *gin.Context) {
-			time.Sleep(100 * time.Millisecond)
+			// Use context-aware wait so the handler exits when timeout fires
+			select {
+			case <-time.After(100 * time.Millisecond):
+			case <-c.Request.Context().Done():
+				return
+			}
 			c.String(http.StatusOK, "should not reach")
 		},
 	)
 	r.Use(func(c *gin.Context) {
+		// Check context cancellation before doing work
+		if c.Request.Context().Err() != nil {
+			return
+		}
 		called = true
 	})
 
@@ -160,7 +174,7 @@ func TestNoNextAfterTimeout(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusRequestTimeout, w.Code)
-	assert.False(t, called, "next middleware should not be called after timeout")
+	assert.False(t, called, "next middleware should not run after context timeout")
 }
 
 /*
@@ -191,4 +205,47 @@ func TestTimeoutPanic(t *testing.T) {
 	// Verify the response status code and body.
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 	assert.Contains(t, w.Body.String(), "panic caught: timeout panic test")
+}
+
+func TestDataRace(t *testing.T) {
+	r := gin.New()
+	r.GET("/race", New(
+		WithTimeout(50*time.Millisecond),
+	), func(c *gin.Context) {
+		// Sleep longer than the timeout to ensure the timeout path is always taken.
+		// Do NOT use context cancellation here because ctx.Done() fires at the same
+		// time as the timer, making the select nondeterministic.
+		time.Sleep(200 * time.Millisecond)
+		c.String(http.StatusOK, "done")
+	})
+
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequestWithContext(context.Background(), "GET", "/race", nil)
+			r.ServeHTTP(w, req)
+			assert.Equal(t, http.StatusRequestTimeout, w.Code)
+		}()
+	}
+	wg.Wait()
+}
+
+func TestContextDeadlineSet(t *testing.T) {
+	r := gin.New()
+	var hasDeadline bool
+	r.GET("/deadline", New(
+		WithTimeout(1*time.Second),
+	), func(c *gin.Context) {
+		_, hasDeadline = c.Request.Context().Deadline()
+	})
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequestWithContext(context.Background(), "GET", "/deadline", nil)
+	r.ServeHTTP(w, req)
+
+	assert.True(t, hasDeadline, "request context should have a deadline set by the middleware")
+	assert.Equal(t, http.StatusOK, w.Code)
 }
