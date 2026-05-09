@@ -212,7 +212,12 @@ func TestHTTPStatusCode(t *testing.T) {
 		}
 
 		initCase = func(c testCase) (*http.Request, *httptest.ResponseRecorder) {
-			return httptest.NewRequestWithContext(context.Background(), c.Method, c.Path, nil), httptest.NewRecorder()
+			return httptest.NewRequestWithContext(
+				context.Background(),
+				c.Method,
+				c.Path,
+				nil,
+			), httptest.NewRecorder()
 		}
 	)
 
@@ -445,7 +450,12 @@ func TestWriteHeader_VariousOverrides(t *testing.T) {
 			})
 
 			w := httptest.NewRecorder()
-			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
+			req := httptest.NewRequestWithContext(
+				context.Background(),
+				http.MethodGet,
+				"/test",
+				nil,
+			)
 			r.ServeHTTP(w, req)
 
 			assert.Equal(t, tt.expected, w.Code)
@@ -521,7 +531,12 @@ func TestWriteHeader_JSONResponse(t *testing.T) {
 			})
 
 			w := httptest.NewRecorder()
-			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
+			req := httptest.NewRequestWithContext(
+				context.Background(),
+				http.MethodGet,
+				"/test",
+				nil,
+			)
 			r.ServeHTTP(w, req)
 
 			assert.Equal(t, tt.code, w.Code)
@@ -591,7 +606,12 @@ func TestStaticFileServing(t *testing.T) {
 
 	// existing file should return 200 with correct body
 	w := httptest.NewRecorder()
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/static/test.txt", nil)
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodGet,
+		"/static/test.txt",
+		nil,
+	)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -599,7 +619,12 @@ func TestStaticFileServing(t *testing.T) {
 
 	// non-existent file should return 404
 	w2 := httptest.NewRecorder()
-	req2 := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/static/nonexistent.txt", nil)
+	req2 := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodGet,
+		"/static/nonexistent.txt",
+		nil,
+	)
 	r.ServeHTTP(w2, req2)
 
 	assert.Equal(t, http.StatusNotFound, w2.Code)
@@ -623,7 +648,12 @@ func TestStaticFileServing_GroupLevel(t *testing.T) {
 	g.Static("/static", dir)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/files/static/test.txt", nil)
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodGet,
+		"/files/static/test.txt",
+		nil,
+	)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -651,7 +681,12 @@ func TestStaticFileServing_ContentTypeHeader(t *testing.T) {
 
 	// JSON file
 	w := httptest.NewRecorder()
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/static/data.json", nil)
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodGet,
+		"/static/data.json",
+		nil,
+	)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -660,7 +695,12 @@ func TestStaticFileServing_ContentTypeHeader(t *testing.T) {
 
 	// HTML file
 	w2 := httptest.NewRecorder()
-	req2 := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/static/page.html", nil)
+	req2 := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodGet,
+		"/static/page.html",
+		nil,
+	)
 	r.ServeHTTP(w2, req2)
 
 	assert.Equal(t, http.StatusOK, w2.Code)
@@ -697,7 +737,12 @@ func TestStaticFileServing_Concurrent(t *testing.T) {
 			go func(name, expectedContent string) {
 				defer wg.Done()
 				w := httptest.NewRecorder()
-				req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/static/"+name, nil)
+				req := httptest.NewRequestWithContext(
+					context.Background(),
+					http.MethodGet,
+					"/static/"+name,
+					nil,
+				)
 				r.ServeHTTP(w, req)
 				assert.Equal(t, http.StatusOK, w.Code,
 					"file %s should return 200", name)
@@ -733,7 +778,12 @@ func TestStaticFileServing_WithTimeout(t *testing.T) {
 	r.Static("/static", dir)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/static/test.txt", nil)
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodGet,
+		"/static/test.txt",
+		nil,
+	)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusRequestTimeout, w.Code)
@@ -849,7 +899,12 @@ func TestRouteLevel_ConcurrentRequests(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			w := httptest.NewRecorder()
-			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
+			req := httptest.NewRequestWithContext(
+				context.Background(),
+				http.MethodGet,
+				"/test",
+				nil,
+			)
 			r.ServeHTTP(w, req)
 			assert.Equal(t, http.StatusOK, w.Code)
 			assert.Equal(t, "hello", w.Body.String())
