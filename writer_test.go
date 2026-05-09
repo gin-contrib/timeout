@@ -17,6 +17,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const testMePath = "/me"
+
 func TestWriteHeader(t *testing.T) {
 	tests := []struct {
 		name string
@@ -78,7 +80,7 @@ func TestWriter_Status(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/test", nil)
 
 	r.ServeHTTP(w, req)
 
@@ -131,7 +133,7 @@ func TestHTTPStatusCode(t *testing.T) {
 			{
 				Name:          "Plain text (200)",
 				Method:        http.MethodGet,
-				Path:          "/me",
+				Path:          testMePath,
 				ExpStatusCode: http.StatusOK,
 				Handler: func(ctx *gin.Context) {
 					ctx.String(http.StatusOK, "I'm text!")
@@ -140,7 +142,7 @@ func TestHTTPStatusCode(t *testing.T) {
 			{
 				Name:          "Plain text (201)",
 				Method:        http.MethodGet,
-				Path:          "/me",
+				Path:          testMePath,
 				ExpStatusCode: http.StatusCreated,
 				Handler: func(ctx *gin.Context) {
 					ctx.String(http.StatusCreated, "I'm created!")
@@ -149,7 +151,7 @@ func TestHTTPStatusCode(t *testing.T) {
 			{
 				Name:          "Plain text (204)",
 				Method:        http.MethodGet,
-				Path:          "/me",
+				Path:          testMePath,
 				ExpStatusCode: http.StatusNoContent,
 				Handler: func(ctx *gin.Context) {
 					ctx.String(http.StatusNoContent, "")
@@ -158,7 +160,7 @@ func TestHTTPStatusCode(t *testing.T) {
 			{
 				Name:          "Plain text (400)",
 				Method:        http.MethodGet,
-				Path:          "/me",
+				Path:          testMePath,
 				ExpStatusCode: http.StatusBadRequest,
 				Handler: func(ctx *gin.Context) {
 					ctx.String(http.StatusBadRequest, "")
@@ -167,7 +169,7 @@ func TestHTTPStatusCode(t *testing.T) {
 			{
 				Name:          "JSON (200)",
 				Method:        http.MethodGet,
-				Path:          "/me",
+				Path:          testMePath,
 				ExpStatusCode: http.StatusOK,
 				Handler: func(ctx *gin.Context) {
 					ctx.JSON(http.StatusOK, gin.H{"field": "value"})
@@ -176,7 +178,7 @@ func TestHTTPStatusCode(t *testing.T) {
 			{
 				Name:          "JSON (201)",
 				Method:        http.MethodGet,
-				Path:          "/me",
+				Path:          testMePath,
 				ExpStatusCode: http.StatusCreated,
 				Handler: func(ctx *gin.Context) {
 					ctx.JSON(http.StatusCreated, gin.H{"field": "value"})
@@ -185,7 +187,7 @@ func TestHTTPStatusCode(t *testing.T) {
 			{
 				Name:          "JSON (204)",
 				Method:        http.MethodGet,
-				Path:          "/me",
+				Path:          testMePath,
 				ExpStatusCode: http.StatusNoContent,
 				Handler: func(ctx *gin.Context) {
 					ctx.JSON(http.StatusNoContent, nil)
@@ -194,7 +196,7 @@ func TestHTTPStatusCode(t *testing.T) {
 			{
 				Name:          "JSON (400)",
 				Method:        http.MethodGet,
-				Path:          "/me",
+				Path:          testMePath,
 				ExpStatusCode: http.StatusBadRequest,
 				Handler: func(ctx *gin.Context) {
 					ctx.JSON(http.StatusBadRequest, nil)
@@ -203,14 +205,14 @@ func TestHTTPStatusCode(t *testing.T) {
 			{
 				Name:          "No reply",
 				Method:        http.MethodGet,
-				Path:          "/me",
+				Path:          testMePath,
 				ExpStatusCode: http.StatusOK,
 				Handler:       func(ctx *gin.Context) {},
 			},
 		}
 
 		initCase = func(c testCase) (*http.Request, *httptest.ResponseRecorder) {
-			return httptest.NewRequest(c.Method, c.Path, nil), httptest.NewRecorder()
+			return httptest.NewRequestWithContext(context.Background(),c.Method, c.Path, nil), httptest.NewRecorder()
 		}
 	)
 
@@ -309,7 +311,7 @@ func TestWriteHeader_AfterWriteHeaderNow(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/test", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNoContent, w.Code)
@@ -334,7 +336,7 @@ func TestWriteHeader_AfterTimeout(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/test", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusRequestTimeout, w.Code)
@@ -356,7 +358,7 @@ func TestWriteHeaderNow_DefaultStatus(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/test", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -378,7 +380,7 @@ func TestWriteHeaderNow_Idempotent(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/test", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusCreated, w.Code)
@@ -406,7 +408,7 @@ func TestWriteHeader_StatusVisibleInMiddleware(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/test", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -443,7 +445,7 @@ func TestWriteHeader_VariousOverrides(t *testing.T) {
 			})
 
 			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/test", nil)
 			r.ServeHTTP(w, req)
 
 			assert.Equal(t, tt.expected, w.Code)
@@ -469,7 +471,7 @@ func TestWriteHeader_OverrideWithBody(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/test", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -519,7 +521,7 @@ func TestWriteHeader_JSONResponse(t *testing.T) {
 			})
 
 			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/test", nil)
 			r.ServeHTTP(w, req)
 
 			assert.Equal(t, tt.code, w.Code)
@@ -542,7 +544,7 @@ func TestWriteHeader_NoResponse(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/test", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -562,7 +564,7 @@ func TestWriteHeader_AbortWithStatus(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/test", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
@@ -589,7 +591,7 @@ func TestStaticFileServing(t *testing.T) {
 
 	// existing file should return 200 with correct body
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/static/test.txt", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/static/test.txt", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -597,7 +599,7 @@ func TestStaticFileServing(t *testing.T) {
 
 	// non-existent file should return 404
 	w2 := httptest.NewRecorder()
-	req2 := httptest.NewRequest(http.MethodGet, "/static/nonexistent.txt", nil)
+	req2 := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/static/nonexistent.txt", nil)
 	r.ServeHTTP(w2, req2)
 
 	assert.Equal(t, http.StatusNotFound, w2.Code)
@@ -621,7 +623,7 @@ func TestStaticFileServing_GroupLevel(t *testing.T) {
 	g.Static("/static", dir)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/files/static/test.txt", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/files/static/test.txt", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -649,7 +651,7 @@ func TestStaticFileServing_ContentTypeHeader(t *testing.T) {
 
 	// JSON file
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/static/data.json", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/static/data.json", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -658,7 +660,7 @@ func TestStaticFileServing_ContentTypeHeader(t *testing.T) {
 
 	// HTML file
 	w2 := httptest.NewRecorder()
-	req2 := httptest.NewRequest(http.MethodGet, "/static/page.html", nil)
+	req2 := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/static/page.html", nil)
 	r.ServeHTTP(w2, req2)
 
 	assert.Equal(t, http.StatusOK, w2.Code)
@@ -695,7 +697,7 @@ func TestStaticFileServing_Concurrent(t *testing.T) {
 			go func(name, expectedContent string) {
 				defer wg.Done()
 				w := httptest.NewRecorder()
-				req := httptest.NewRequest(http.MethodGet, "/static/"+name, nil)
+				req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/static/"+name, nil)
 				r.ServeHTTP(w, req)
 				assert.Equal(t, http.StatusOK, w.Code,
 					"file %s should return 200", name)
@@ -731,7 +733,7 @@ func TestStaticFileServing_WithTimeout(t *testing.T) {
 	r.Static("/static", dir)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/static/test.txt", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/static/test.txt", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusRequestTimeout, w.Code)
@@ -755,7 +757,7 @@ func TestRouteLevel_TimeoutFires(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/slow", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/slow", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusRequestTimeout, w.Code)
@@ -778,7 +780,7 @@ func TestRouteLevel_SuccessBeforeTimeout(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/fast", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/fast", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -815,14 +817,14 @@ func TestRouteLevel_MultipleRoutes(t *testing.T) {
 
 	// Fast route succeeds
 	w1 := httptest.NewRecorder()
-	req1 := httptest.NewRequest(http.MethodGet, "/fast", nil)
+	req1 := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/fast", nil)
 	r.ServeHTTP(w1, req1)
 	assert.Equal(t, http.StatusOK, w1.Code)
 	assert.Equal(t, "fast ok", w1.Body.String())
 
 	// Slow route times out
 	w2 := httptest.NewRecorder()
-	req2 := httptest.NewRequest(http.MethodGet, "/slow", nil)
+	req2 := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/slow", nil)
 	r.ServeHTTP(w2, req2)
 	assert.Equal(t, http.StatusGatewayTimeout, w2.Code)
 	assert.Equal(t, "slow timeout", w2.Body.String())
@@ -847,7 +849,7 @@ func TestRouteLevel_ConcurrentRequests(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/test", nil)
 			r.ServeHTTP(w, req)
 			assert.Equal(t, http.StatusOK, w.Code)
 			assert.Equal(t, "hello", w.Body.String())
