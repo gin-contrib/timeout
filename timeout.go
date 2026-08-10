@@ -122,6 +122,11 @@ func New(opts ...Option) gin.HandlerFunc {
 			}
 			tw.FreeBuffer()
 			bufPool.Put(buffer)
+			// Restore the original writer so anything gin writes after this
+			// middleware returns - such as the default 404 body from
+			// serveError() when no route matched - reaches the real
+			// ResponseWriter instead of the freed buffer.
+			c.Writer = w
 
 		case <-timer.C:
 			tw.mu.Lock()
