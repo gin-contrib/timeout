@@ -150,7 +150,12 @@ func New(opts ...Option) gin.HandlerFunc {
 			case <-panicChan:
 			}
 
-			// Goroutine is done. Safe to modify c.index now.
+			// Goroutine is done. Safe to modify c and c.index now. Restoring the
+			// writer matters here too: FreeBuffer left tw reporting Size() == -1,
+			// so middleware that inspects c.Writer after c.Next() - gin's own
+			// logger reading BodySize, for one - would read that instead of the
+			// timeout response actually written to w.
+			c.Writer = w
 			c.Abort()
 		}
 	}
