@@ -3,7 +3,7 @@
 [![Run Tests](https://github.com/gin-contrib/timeout/actions/workflows/go.yml/badge.svg?branch=master)](https://github.com/gin-contrib/timeout/actions/workflows/go.yml)
 [![Trivy Security Scan](https://github.com/gin-contrib/timeout/actions/workflows/trivy-scan.yml/badge.svg)](https://github.com/gin-contrib/timeout/actions/workflows/trivy-scan.yml)
 [![codecov](https://codecov.io/gh/gin-contrib/timeout/branch/master/graph/badge.svg)](https://codecov.io/gh/gin-contrib/timeout)
-[![GoDoc](https://godoc.org/github.com/gin-contrib/timeout?status.svg)](https://pkg.go.dev/github.com/gin-contrib/timeout?tab=doc)
+[![Go Reference](https://pkg.go.dev/badge/github.com/gin-contrib/timeout.svg)](https://pkg.go.dev/github.com/gin-contrib/timeout)
 
 Timeout is a Gin middleware that wraps a handler and aborts its execution if a specified timeout is reached. This is useful for preventing slow handlers from blocking your server.
 
