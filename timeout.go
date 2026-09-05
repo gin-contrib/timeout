@@ -122,6 +122,11 @@ func New(opts ...Option) gin.HandlerFunc {
 			}
 			tw.FreeBuffer()
 			bufPool.Put(buffer)
+			// Restore the original writer so anything gin writes after this
+			// middleware returns - such as the default 404 body from
+			// serveError() when no route matched - reaches the real
+			// ResponseWriter instead of the freed buffer.
+			c.Writer = w
 
 		case <-timer.C:
 			tw.mu.Lock()
@@ -145,7 +150,12 @@ func New(opts ...Option) gin.HandlerFunc {
 			case <-panicChan:
 			}
 
-			// Goroutine is done. Safe to modify c.index now.
+			// Goroutine is done. Safe to modify c and c.index now. Restoring the
+			// writer matters here too: FreeBuffer left tw reporting Size() == -1,
+			// so middleware that inspects c.Writer after c.Next() - gin's own
+			// logger reading BodySize, for one - would read that instead of the
+			// timeout response actually written to w.
+			c.Writer = w
 			c.Abort()
 		}
 	}

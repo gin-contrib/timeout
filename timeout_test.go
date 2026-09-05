@@ -296,3 +296,61 @@ func TestContextDeadlineSet(t *testing.T) {
 	assert.True(t, hasDeadline, "request context should have a deadline set by the middleware")
 	assert.Equal(t, http.StatusOK, w.Code)
 }
+
+func TestNoRouteWithUse(t *testing.T) {
+	r := gin.New()
+	r.Use(New(
+		WithTimeout(1 * time.Second),
+	))
+	r.GET("/hello", func(c *gin.Context) {
+		c.String(http.StatusOK, "world")
+	})
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequestWithContext(context.Background(), "GET", "/no/such/route", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Equal(t, "404 page not found", w.Body.String())
+}
+
+func TestMethodNotAllowedWithUse(t *testing.T) {
+	r := gin.New()
+	r.HandleMethodNotAllowed = true
+	r.Use(New(
+		WithTimeout(1 * time.Second),
+	))
+	r.GET("/hello", func(c *gin.Context) {
+		c.String(http.StatusOK, "world")
+	})
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequestWithContext(context.Background(), "POST", "/hello", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusMethodNotAllowed, w.Code)
+	assert.Equal(t, "405 method not allowed", w.Body.String())
+}
+
+func TestOuterMiddlewareSeesResponseSize(t *testing.T) {
+	var size int
+	r := gin.New()
+	// Runs before the timeout middleware, so after c.Next() it reads whatever
+	// writer was left on the context - the same position as gin.Logger().
+	r.Use(func(c *gin.Context) {
+		c.Next()
+		size = c.Writer.Size()
+	})
+	r.Use(New(
+		WithTimeout(5 * time.Millisecond),
+	))
+	r.GET("/", emptySuccessResponse)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequestWithContext(context.Background(), "GET", "/", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusRequestTimeout, w.Code)
+	assert.Equal(t, len(http.StatusText(http.StatusRequestTimeout)), size,
+		"outer middleware should see the size of the timeout response, not the freed buffer")
+}
