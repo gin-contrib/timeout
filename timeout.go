@@ -3,6 +3,7 @@ package timeout
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/http"
 	"runtime/debug"
 	"time"
@@ -18,7 +19,7 @@ const (
 
 // panicChan transmits both the panic value and the stack trace.
 type panicInfo struct {
-	Value interface{}
+	Value any
 	Stack []byte
 }
 
@@ -105,9 +106,7 @@ func New(opts ...Option) gin.HandlerFunc {
 			tw.mu.Lock()
 			defer tw.mu.Unlock()
 			dst := tw.ResponseWriter.Header()
-			for k, vv := range tw.Header() {
-				dst[k] = vv
-			}
+			maps.Copy(dst, tw.Header())
 
 			// Write the status code if it was set, otherwise use 200
 			if tw.code != 0 {

@@ -3,6 +3,7 @@ package timeout
 import (
 	"bytes"
 	"fmt"
+	"maps"
 	"net/http"
 	"sync"
 
@@ -37,9 +38,7 @@ func (w *Writer) WriteHeaderNow() {
 
 		// Copy headers from our cache to the underlying ResponseWriter
 		dst := w.ResponseWriter.Header()
-		for k, vv := range w.headers {
-			dst[k] = vv
-		}
+		maps.Copy(dst, w.headers)
 
 		w.wroteHeaders = true
 		w.ResponseWriter.WriteHeader(w.code)

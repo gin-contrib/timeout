@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-contrib/timeout"
+
 	"github.com/gin-gonic/gin"
 )
 
