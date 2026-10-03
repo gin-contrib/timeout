@@ -15,6 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const testMePath = "/me"
@@ -497,7 +498,7 @@ func TestWriteHeader_JSONResponse(t *testing.T) {
 	tests := []struct {
 		name     string
 		code     int
-		body     interface{}
+		body     any
 		expected string
 	}{
 		{
@@ -595,7 +596,7 @@ func TestStaticFileServing(t *testing.T) {
 	dir := t.TempDir()
 	testContent := "hello static file"
 	err := os.WriteFile(filepath.Join(dir, "test.txt"), []byte(testContent), 0o600)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	r := gin.New()
 	r.Use(New(
@@ -638,7 +639,7 @@ func TestStaticFileServing_GroupLevel(t *testing.T) {
 	dir := t.TempDir()
 	testContent := "group level static"
 	err := os.WriteFile(filepath.Join(dir, "test.txt"), []byte(testContent), 0o600)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	r := gin.New()
 	g := r.Group("/files", New(
@@ -667,10 +668,10 @@ func TestStaticFileServing_ContentTypeHeader(t *testing.T) {
 
 	dir := t.TempDir()
 	err := os.WriteFile(filepath.Join(dir, "data.json"), []byte(`{"key":"value"}`), 0o600)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	htmlContent := `<html><body>hello</body></html>`
 	err = os.WriteFile(filepath.Join(dir, "page.html"), []byte(htmlContent), 0o600)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	r := gin.New()
 	r.Use(New(
@@ -691,7 +692,7 @@ func TestStaticFileServing_ContentTypeHeader(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Contains(t, w.Header().Get("Content-Type"), "application/json")
-	assert.Equal(t, `{"key":"value"}`, w.Body.String())
+	assert.JSONEq(t, `{"key":"value"}`, w.Body.String())
 
 	// HTML file
 	w2 := httptest.NewRecorder()
@@ -720,7 +721,7 @@ func TestStaticFileServing_Concurrent(t *testing.T) {
 	}
 	for name, content := range files {
 		err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	}
 
 	r := gin.New()
@@ -731,7 +732,7 @@ func TestStaticFileServing_Concurrent(t *testing.T) {
 	r.Static("/static", dir)
 
 	var wg sync.WaitGroup
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		for name, expectedContent := range files {
 			wg.Add(1)
 			go func(name, expectedContent string) {
@@ -761,7 +762,7 @@ func TestStaticFileServing_WithTimeout(t *testing.T) {
 
 	dir := t.TempDir()
 	err := os.WriteFile(filepath.Join(dir, "test.txt"), []byte("content"), 0o600)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	r := gin.New()
 	r.Use(New(
@@ -894,10 +895,8 @@ func TestRouteLevel_ConcurrentRequests(t *testing.T) {
 	})
 
 	var wg sync.WaitGroup
-	for i := 0; i < 50; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 50 {
+		wg.Go(func() {
 			w := httptest.NewRecorder()
 			req := httptest.NewRequestWithContext(
 				context.Background(),
@@ -908,7 +907,7 @@ func TestRouteLevel_ConcurrentRequests(t *testing.T) {
 			r.ServeHTTP(w, req)
 			assert.Equal(t, http.StatusOK, w.Code)
 			assert.Equal(t, "hello", w.Body.String())
-		}()
+		})
 	}
 	wg.Wait()
 }
