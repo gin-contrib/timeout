@@ -1,7 +1,6 @@
 package timeout
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -26,7 +25,7 @@ func TestTimeout(t *testing.T) {
 	)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusRequestTimeout, w.Code)
@@ -41,7 +40,7 @@ func TestTimeoutWithUse(t *testing.T) {
 	r.GET("/", emptySuccessResponse)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusRequestTimeout, w.Code)
@@ -57,7 +56,7 @@ func TestWithoutTimeout(t *testing.T) {
 	)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusRequestTimeout, w.Code)
@@ -78,7 +77,7 @@ func TestCustomResponse(t *testing.T) {
 	)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusRequestTimeout, w.Code)
@@ -100,7 +99,7 @@ func TestSuccess(t *testing.T) {
 	)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -128,7 +127,7 @@ func TestLargeResponse(t *testing.T) {
 	for range 10 {
 		wg.Go(func() {
 			w := httptest.NewRecorder()
-			req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/slow", nil)
+			req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "/slow", nil)
 			r.ServeHTTP(w, req)
 			assert.Equal(t, http.StatusRequestTimeout, w.Code)
 			assert.JSONEq(t, `{"error": "timeout error"}`, w.Body.String())
@@ -166,7 +165,7 @@ func TestNoNextAfterTimeout(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusRequestTimeout, w.Code)
@@ -195,7 +194,7 @@ func TestTimeoutPanic(t *testing.T) {
 	)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/panic", nil)
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "/panic", nil)
 	r.ServeHTTP(w, req)
 
 	// Verify the response status code and body.
@@ -219,7 +218,7 @@ func TestDataRace(t *testing.T) {
 	for range 20 {
 		wg.Go(func() {
 			w := httptest.NewRecorder()
-			req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/race", nil)
+			req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "/race", nil)
 			r.ServeHTTP(w, req)
 			assert.Equal(t, http.StatusRequestTimeout, w.Code)
 		})
@@ -259,7 +258,7 @@ func TestWriteAfterTimeout(t *testing.T) {
 	for i := range 50 {
 		// Request A — will time out; goroutine keeps running on master.
 		w1 := httptest.NewRecorder()
-		req1, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/slow", nil)
+		req1, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "/slow", nil)
 		r.ServeHTTP(w1, req1)
 		assert.Equal(t, http.StatusRequestTimeout, w1.Code)
 
@@ -267,7 +266,7 @@ func TestWriteAfterTimeout(t *testing.T) {
 		// With the goroutine-wait fix, the goroutine is guaranteed done before
 		// ServeHTTP returns, so no sleep is needed.
 		w2 := httptest.NewRecorder()
-		req2, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/fast", nil)
+		req2, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "/fast", nil)
 		r.ServeHTTP(w2, req2)
 
 		// The fast endpoint must return exactly its own data — no leaked prefix.
@@ -286,7 +285,7 @@ func TestContextDeadlineSet(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/deadline", nil)
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "/deadline", nil)
 	r.ServeHTTP(w, req)
 
 	assert.True(t, hasDeadline, "request context should have a deadline set by the middleware")
